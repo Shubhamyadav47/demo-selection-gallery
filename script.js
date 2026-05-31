@@ -23,6 +23,78 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
+const FREE_TOKENS_ON_SIGNUP = 5;
+const TOKENS_PER_GENERATION = 1;
+
+function getTokenStorageKey(uid) {
+    return `galleryTokenBalance_${uid}`;
+}
+
+function getStoredTokenBalance(uid) {
+    const raw = localStorage.getItem(getTokenStorageKey(uid));
+    return raw === null ? null : parseInt(raw, 10) || 0;
+}
+
+function setStoredTokenBalance(uid, amount) {
+    localStorage.setItem(getTokenStorageKey(uid), String(amount));
+}
+
+function getCurrentTokenBalance() {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const stored = getStoredTokenBalance(user.uid);
+    return stored === null ? FREE_TOKENS_ON_SIGNUP : stored;
+}
+
+function updateTokenUI(balance) {
+    const tokenCount = document.getElementById("tokenCount");
+    const tokenCountInline = document.getElementById("tokenCountInline");
+    if (tokenCount) tokenCount.textContent = balance;
+    if (tokenCountInline) tokenCountInline.textContent = balance;
+    const generateBtn = document.getElementById("generateBtn");
+    if (generateBtn) {
+        generateBtn.disabled = balance < TOKENS_PER_GENERATION;
+        generateBtn.title = balance < TOKENS_PER_GENERATION ? "Buy tokens to generate a gallery" : "";
+    }
+}
+
+function ensureUserTokenBalance(user) {
+    if (!user) return;
+    let balance = getStoredTokenBalance(user.uid);
+    if (balance === null) {
+        balance = FREE_TOKENS_ON_SIGNUP;
+        setStoredTokenBalance(user.uid, balance);
+        showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
+    }
+    updateTokenUI(balance);
+}
+
+function changeTokenBalance(amount) {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const current = getCurrentTokenBalance();
+    const next = Math.max(0, current + amount);
+    setStoredTokenBalance(user.uid, next);
+    updateTokenUI(next);
+    return next;
+}
+
+function spendTokens(amount) {
+    const current = getCurrentTokenBalance();
+    if (current < amount) return false;
+    changeTokenBalance(-amount);
+    return true;
+}
+
+function buyTokens(amount) {
+    if (!auth.currentUser) {
+        showNotification("Please sign in before buying tokens.");
+        return;
+    }
+    const newBalance = changeTokenBalance(amount);
+    showNotification(`Added ${amount} tokens. You now have ${newBalance} tokens.`);
+}
+
 
 // =========================================================
 //  AUTH STATE OBSERVER
@@ -61,6 +133,8 @@ auth.onAuthStateChanged((user) => {
             userInitials.textContent   = displayName[0].toUpperCase();
         }
 
+        ensureUserTokenBalance(user);
+
     } else {
         // ── Signed out ─────────────────────────────────────
         authOverlay.style.transition    = "";
@@ -68,6 +142,7 @@ auth.onAuthStateChanged((user) => {
         authOverlay.style.opacity       = "1";
         authOverlay.style.pointerEvents = "";
         mainApp.style.display           = "none";
+        updateTokenUI(0);
     }
 });
 
@@ -401,6 +476,11 @@ document.getElementById("resetEmail").addEventListener("keydown", (e) => {
                 return;
             }
 
+            if (getCurrentTokenBalance() < TOKENS_PER_GENERATION) {
+                showNotification("Not enough tokens. Buy tokens to generate a gallery.");
+                return;
+            }
+
             const btn = document.getElementById("generateBtn");
             btn.disabled = true;
             btn.textContent = "Building gallery…";
@@ -727,9 +807,10 @@ ${passwordScript}
 
                     generatedHTML = generatedHTML; // assign is already done above
 
+                    spendTokens(TOKENS_PER_GENERATION);
                     const downloadBtn = document.getElementById("downloadBtn");
                     downloadBtn.classList.add("active");
-                    showNotification("Interactive Gallery Compiled! (" + imageData.length + " images embedded)");
+                    showNotification("Interactive Gallery Compiled! (" + imageData.length + " images embedded) — 1 token used.");
 
                 } catch (err) {
                     showNotification("Error building gallery: " + err.message);
