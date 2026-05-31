@@ -680,3 +680,68 @@ button {
     .container    { padding: 24px 20px; }
     .btn-logout span { display: none; }
 }
+/* User Bar Credits */
+.user-credits {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #EEF2FF;
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-left: 20px;
+    border: 1px solid #C7D2FE;
+}
+.btn-buy-credits {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn-buy-credits:hover { background: var(--primary-hover); }
+
+/* Pricing Modal */
+.pricing-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; justify-content: center; align-items: center;
+    padding: 20px;
+}
+.pricing-card {
+    background: var(--card-bg); width: 100%; max-width: 600px;
+    padding: 40px; border-radius: 16px; position: relative;
+    text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+}
+.close-modal {
+    position: absolute; top: 16px; right: 16px; background: none;
+    border: none; font-size: 20px; cursor: pointer; color: var(--text-muted);
+}
+.pricing-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px;
+}
+.price-tier {
+    border: 2px solid var(--border); border-radius: 12px; padding: 20px;
+    cursor: pointer; transition: all 0.2s ease; position: relative;
+}
+.price-tier:hover { border-color: var(--primary); background: #F9FAFB; transform: translateY(-2px); }
+.price-tier.popular { border-color: var(--success); background: #F0FDF4; }
+.popular-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--success); color: white; font-size: 11px; font-weight: 700;
+    padding: 4px 12px; border-radius: 20px; text-transform: uppercase;
+}
+.tier-credits { font-size: 18px; font-weight: 800; color: var(--text-main); }
+.tier-price { font-size: 24px; font-weight: 800; color: var(--primary); margin: 8px 0; }
+.tier-save { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.tier-save.highlighted { color: var(--success); }
+
+@media (max-width: 640px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+    .user-credits { margin-left: 0; margin-top: 10px; width: 100%; justify-content: space-between;}
+}

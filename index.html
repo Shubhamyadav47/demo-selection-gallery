@@ -7,6 +7,37 @@
 <link href="styles.css" rel="stylesheet"/>
 </head>
 <body>
+<div id="pricingModal" class="pricing-overlay" style="display: none;">
+  <div class="pricing-card">
+    <button class="close-modal" onclick="closePricingModal()">✕</button>
+    <h2>Get More Gallery Credits</h2>
+    <p>1 Credit = 1 Gallery Generation</p>
+    
+    <div class="pricing-grid">
+      <div class="price-tier" onclick="initiatePayment(25, 1)">
+        <div class="tier-credits">1 Credit</div>
+        <div class="tier-price">₹25</div>
+        <div class="tier-save">Pay as you go</div>
+      </div>
+      <div class="price-tier" onclick="initiatePayment(100, 5)">
+        <div class="tier-credits">5 Credits</div>
+        <div class="tier-price">₹100</div>
+        <div class="tier-save highlighted">Save ₹25</div>
+      </div>
+      <div class="price-tier popular" onclick="initiatePayment(180, 10)">
+        <div class="popular-badge">Most Popular</div>
+        <div class="tier-credits">10 Credits</div>
+        <div class="tier-price">₹180</div>
+        <div class="tier-save highlighted">Save ₹70</div>
+      </div>
+      <div class="price-tier" onclick="initiatePayment(299, 20)">
+        <div class="tier-credits">20 Credits</div>
+        <div class="tier-price">₹299</div>
+        <div class="tier-save highlighted">Save ₹201</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ================================================
      AUTH OVERLAY — displayed until user signs in
@@ -109,6 +140,11 @@
       </svg>
       Logout
     </button>
+<div class="user-credits" id="userCreditsDisplay" style="display:none;">
+  <span class="credit-icon">🪙</span> 
+  <span id="creditCount">0</span> Credits
+  <button class="btn-buy-credits" onclick="openPricingModal()">Buy More</button>
+</div>
   </div>
 
   <!-- Gallery Generator Container (original, unchanged) -->
@@ -168,7 +204,7 @@
     </div>
     <!-- Action Buttons -->
     <div class="buttons-wrapper">
-      <button class="btn-generate" id="generateBtn" onclick="generateGallery()">
+      <button class="btn-generate" id="generateBtn" onclick="handleGenerateClick()">
         <svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20">
           <path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
             stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
@@ -190,6 +226,7 @@
 
 <div id="toast">Gallery Generated Successfully!</div>
 
+
 <!-- Firebase SDKs — must load before script.js -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -197,5 +234,7 @@
 <script src="app.js"></script>
 
 <script type="module" src="app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </body>
 </html>

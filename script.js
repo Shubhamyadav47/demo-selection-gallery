@@ -22,52 +22,74 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
+const db = firebase.firestore();
+let currentCredits = 0; // Global variable to track user credits
 
 
 // =========================================================
 //  AUTH STATE OBSERVER
 //  Fires automatically on every sign-in / sign-out event
 // =========================================================
-auth.onAuthStateChanged((user) => {
+auth.onAuthStateChanged(async (user) => {
     const authOverlay = document.getElementById("authOverlay");
     const mainApp     = document.getElementById("mainApp");
 
     if (user) {
-        // ── Signed in ──────────────────────────────────────
-        // Smooth fade-out the auth overlay
+        // Handle UI Fade Out
         authOverlay.style.transition    = "opacity 0.35s ease";
         authOverlay.style.opacity       = "0";
         authOverlay.style.pointerEvents = "none";
         setTimeout(() => { authOverlay.style.display = "none"; }, 360);
-
-        // Reveal main app
         mainApp.style.display = "flex";
 
-        // Populate user bar
+        // Populate User Info
         const displayName = user.displayName || user.email.split("@")[0];
         document.getElementById("userDisplayName").textContent = displayName;
         document.getElementById("userEmailDisplay").textContent = user.email;
-
+        
+        // Handle Avatar
         const avatarImg    = document.getElementById("userAvatarImg");
         const userInitials = document.getElementById("userInitials");
-
         if (user.photoURL) {
-            avatarImg.src          = user.photoURL;
+            avatarImg.src = user.photoURL;
             avatarImg.style.display = "block";
             userInitials.style.display = "none";
         } else {
-            avatarImg.style.display    = "none";
+            avatarImg.style.display = "none";
             userInitials.style.display = "flex";
-            userInitials.textContent   = displayName[0].toUpperCase();
+            userInitials.textContent = displayName[0].toUpperCase();
         }
 
+        // --- FIRESTORE CREDIT LOGIC ---
+        document.getElementById("userCreditsDisplay").style.display = "flex";
+        const userRef = db.collection("users").doc(user.uid);
+        
+        // Check if user is new, if so, give 1 free credit
+        const docSnap = await userRef.get();
+        if (!docSnap.exists) {
+            await userRef.set({
+                email: user.email,
+                credits: 1, // 1 Free Credit for new users
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        // Listen for real-time credit updates
+        userRef.onSnapshot((doc) => {
+            if (doc.exists) {
+                currentCredits = doc.data().credits || 0;
+                document.getElementById("creditCount").textContent = currentCredits;
+            }
+        });
+
     } else {
-        // ── Signed out ─────────────────────────────────────
+        // Signed out
         authOverlay.style.transition    = "";
         authOverlay.style.display       = "flex";
         authOverlay.style.opacity       = "1";
         authOverlay.style.pointerEvents = "";
         mainApp.style.display           = "none";
+        document.getElementById("userCreditsDisplay").style.display = "none";
     }
 });
 
@@ -756,3 +778,112 @@ ${passwordScript}
             link.click();
             showNotification("Your gallery was successfully saved.");
         }
+  // =========================================================
+//  CREDIT & PAYMENT SYSTEM (RAZORPAY)
+// =========================================================
+
+// Intercept the Generate Button Click
+async function handleGenerateClick() {
+    if (imageData.length === 0) {
+        showNotification("Please upload at least one image first.");
+        return;
+    }
+
+    if (currentCredits >= 1) {
+        // Deduct 1 credit in Firestore, then generate
+        const user = auth.currentUser;
+        if (user) {
+            try {
+                const btn = document.getElementById("generateBtn");
+                btn.disabled = true;
+                btn.textContent = "Deducting credit...";
+
+                await db.collection("users").doc(user.uid).update({
+                    credits: firebase.firestore.FieldValue.increment(-1)
+                });
+                
+                // Credit deducted successfully, build gallery
+                generateGallery(); 
+            } catch (error) {
+                showNotification("Error verifying credits. Please try again.");
+                document.getElementById("generateBtn").disabled = false;
+            }
+        }
+    } else {
+        // Not enough credits, show pricing modal
+        openPricingModal();
+    }
+}
+
+function openPricingModal() {
+    document.getElementById("pricingModal").style.display = "flex";
+}
+
+function closePricingModal() {
+    document.getElementById("pricingModal").style.display = "none";
+}
+
+// Handle Razorpay Checkout
+function initiatePayment(amountInINR, creditsToGive) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // REPLACE 'YOUR_RAZORPAY_KEY_ID' with your actual Razorpay Key ID
+    const razorpayKey = "YOUR_RAZORPAY_KEY_ID"; 
+
+    const options = {
+        key: razorpayKey, 
+        amount: amountInINR * 100, // Razorpay accepts amount in paise (multiply by 100)
+        currency: "INR",
+        name: "Shubhda Studios",
+        description: `Purchase ${creditsToGive} Gallery Credits`,
+        image: "https://your-logo-url-here.png", // Optional: Add your studio logo URL
+        handler: async function (response) {
+            // Payment Success Handler
+            const paymentId = response.razorpay_payment_id;
+            showNotification("Payment successful! Adding credits...");
+            closePricingModal();
+
+            try {
+                const batch = db.batch();
+                const userRef = db.collection("users").doc(user.uid);
+                const txRef = db.collection("transactions").doc(); // auto-generate ID
+
+                // 1. Add credits to user
+                batch.update(userRef, {
+                    credits: firebase.firestore.FieldValue.increment(creditsToGive)
+                });
+
+                // 2. Log the transaction
+                batch.set(txRef, {
+                    uid: user.uid,
+                    email: user.email,
+                    amount: amountInINR,
+                    creditsAdded: creditsToGive,
+                    paymentId: paymentId,
+                    date: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await batch.commit();
+                showNotification(`${creditsToGive} credits added to your account!`);
+                
+            } catch (error) {
+                console.error("Error updating database: ", error);
+                showNotification("Credits delayed. Please contact support with Payment ID: " + paymentId);
+            }
+        },
+        prefill: {
+            email: user.email,
+            name: user.displayName || "Photographer"
+        },
+        theme: {
+            color: "#4F46E5" // Matches your --primary CSS variable
+        }
+    };
+
+    const rzp1 = new Razorpay(options);
+    rzp1.on('payment.failed', function (response){
+        showNotification("Payment failed: " + response.error.description);
+    });
+    rzp1.open();
+}
