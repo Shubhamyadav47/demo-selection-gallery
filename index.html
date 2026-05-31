@@ -88,7 +88,10 @@
 <!-- ================================================
      MAIN APP — revealed after authentication
      ================================================ -->
-<div class="user-bar">
+<div id="mainApp" style="display:none">
+
+  <!-- User Bar -->
+  <div class="user-bar">
     <div class="user-info">
       <div class="user-avatar-wrap">
         <img id="userAvatarImg" class="user-avatar-img" src="" alt="" style="display:none"/>
@@ -99,21 +102,17 @@
         <span id="userEmailDisplay" class="user-email-text"></span>
       </div>
     </div>
-    <div class="token-info">
-      <span class="token-label">Tokens:</span>
-      <strong id="tokenCount">0</strong>
-      <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5</button>
-    </div>
-  </div> <div class="container"> <div class="header">
-      <h1>Secure Selection Gallery Generator</h1>
-      <p>Generate private, responsive galleries with instant photo selection, WhatsApp sharing, &amp; file list copying.<br/>
-        Images are embedded directly — <strong>no external files needed.</strong></p>
-    </div>
-    <div class="token-info">
-      <span class="token-label">Tokens:</span>
-      <strong id="tokenCount">0</strong>
-      <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5</button>
-    </div>
+    <button class="btn-logout" onclick="logout()">
+      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+      </svg>
+      Logout
+    </button>
+  </div>
+
+  <!-- Gallery Generator Container (original, unchanged) -->
+  <div class="container">
     <!-- Header Section -->
     <div class="header">
       <h1>Secure Selection Gallery Generator</h1>
@@ -165,17 +164,6 @@
         <div class="progress-bar-track">
           <div class="progress-bar-fill" id="progressFill"></div>
         </div>
-      </div>
-      <div class="token-bar">
-        <div class="token-info">
-          <span>Tokens available:</span>
-          <strong id="tokenCountInline">0</strong>
-        </div>
-        <div class="token-actions">
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5 Tokens</button>
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(10)">Buy 10 Tokens</button>
-        </div>
-        <p class="token-note">Each gallery generation consumes 1 token.</p>
       </div>
     </div>
     <!-- Action Buttons -->
