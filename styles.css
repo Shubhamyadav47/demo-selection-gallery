@@ -323,6 +323,17 @@ button {
     font-size: 13px;
 }
 
+@media (max-width: 720px) {
+    .token-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .token-actions {
+        justify-content: flex-start;
+    }
+}
+
 /* =========================
    TOAST NOTIFICATION
    ========================= */
@@ -703,6 +714,35 @@ button {
 .user-details { display: flex; flex-direction: column; }
 .user-name      { font-size: 14px; font-weight: 700; color: #111827; }
 .user-email-text{ font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+.user-bar .token-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #1F2937;
+}
+
+.user-bar .token-info strong {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+.user-bar .btn-buy-tokens {
+    padding: 8px 12px;
+    background: #EEF2FF;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: #3730A3;
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 72px;
+}
+
+.user-bar .btn-buy-tokens:hover {
+    background: #DDEAFF;
+}
 
 /* Logout button */
 .btn-logout {
