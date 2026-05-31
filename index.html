@@ -88,10 +88,7 @@
 <!-- ================================================
      MAIN APP — revealed after authentication
      ================================================ -->
-<div id="mainApp" style="display:none">
-
-  <!-- User Bar -->
-  <div class="user-bar">
+<div class="user-bar">
     <div class="user-info">
       <div class="user-avatar-wrap">
         <img id="userAvatarImg" class="user-avatar-img" src="" alt="" style="display:none"/>
@@ -101,6 +98,16 @@
         <span id="userDisplayName" class="user-name"></span>
         <span id="userEmailDisplay" class="user-email-text"></span>
       </div>
+    </div>
+    <div class="token-info">
+      <span class="token-label">Tokens:</span>
+      <strong id="tokenCount">0</strong>
+      <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5</button>
+    </div>
+  </div> <div class="container"> <div class="header">
+      <h1>Secure Selection Gallery Generator</h1>
+      <p>Generate private, responsive galleries with instant photo selection, WhatsApp sharing, &amp; file list copying.<br/>
+        Images are embedded directly — <strong>no external files needed.</strong></p>
     </div>
     <div class="token-info">
       <span class="token-label">Tokens:</span>
