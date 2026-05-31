@@ -11,6 +11,18 @@
 //  5. Authentication → Settings → Authorized domains → add your
 //     domain (localhost is allowed by default for testing)
 // =========================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDuupLK07-FteOsI-vOlA6qjNmteDj07ew",
+  authDomain: "gallery-photo-selection.firebaseapp.com",
+  projectId: "gallery-photo-selection",
+  storageBucket: "gallery-photo-selection.firebasestorage.app",
+  messagingSenderId: "100096652204",
+  appId: "1:100096652204:web:fe2ec60567d88782be8009",
+  measurementId: "G-VC6ERLG4BC"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
 
 // =========================================================
 //  AUTH STATE OBSERVER
