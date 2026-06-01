@@ -382,6 +382,11 @@ auth.onAuthStateChanged(async (user) => {
             setStoredTokenBalance(user.uid, firestoreTokens);
         }
         ensureUserTokenBalance(user);
+        
+        // Process any offline sync queue
+        if (isOnline) {
+            await processOfflineSyncQueue(user.uid);
+        }
 
     } else {
         // ── Signed out ─────────────────────────────────────
@@ -1256,7 +1261,9 @@ function showNotification(msg) {
 // Initialize on page load
 document.addEventListener("DOMContentLoaded", () => {
     setupUploadZone();
+    updateConnectionStatus();
     console.log("✅ Gallery App initialized");
     console.log("🔑 Firebase configured:", firebase.app() ? "✅" : "❌");
     console.log("💳 Razorpay Key ID:", RAZORPAY_KEY_ID ? "✅" : "❌");
+    console.log("📡 Connection Status:", isOnline ? "🟢 Online" : "🔴 Offline");
 });
