@@ -23,6 +23,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
+const db = firebase.firestore(); // Added this line
+
+
 const FREE_TOKENS_ON_SIGNUP = 2;
 const TOKENS_PER_GENERATION = 1;
 
@@ -37,23 +40,32 @@ const PURCHASE_PRICES = {
 function getTokenStorageKey(uid) {
     return `galleryTokenBalance_${uid}`;
 }
-
-function getStoredTokenBalance(uid) {
-    const raw = localStorage.getItem(getTokenStorageKey(uid));
-    return raw === null ? null : parseInt(raw, 10) || 0;
+// 1. Fetch from Firestore instead of localStorage
+async function getStoredTokenBalance(uid) {
+    const docRef = db.collection("users").doc(uid);
+    const docSnap = await docRef.get();
+    if (docSnap.exists) {
+        return docSnap.data().tokens;
+    }
+    return null;
 }
 
-function setStoredTokenBalance(uid, amount) {
-    localStorage.setItem(getTokenStorageKey(uid), String(amount));
+// 2. Save to Firestore
+async function setStoredTokenBalance(uid, amount) {
+    await db.collection("users").doc(uid).set({
+        tokens: amount
+    }, { merge: true }); // merge: true prevents overwriting other user data later
 }
 
-function getCurrentTokenBalance() {
+// 3. Make checks async
+async function getCurrentTokenBalance() {
     const user = auth.currentUser;
     if (!user) return 0;
-    const stored = getStoredTokenBalance(user.uid);
+    const stored = await getStoredTokenBalance(user.uid);
     return stored === null ? FREE_TOKENS_ON_SIGNUP : stored;
 }
 
+// 4. Update the UI 
 function updateTokenUI(balance) {
     const tokenCount = document.getElementById("tokenCount");
     const tokenCountInline = document.getElementById("tokenCountInline");
@@ -66,35 +78,37 @@ function updateTokenUI(balance) {
     }
 }
 
-function ensureUserTokenBalance(user) {
+// 5. Check and set initial balance on login
+async function ensureUserTokenBalance(user) {
     if (!user) return;
-    let balance = getStoredTokenBalance(user.uid);
+    let balance = await getStoredTokenBalance(user.uid);
     if (balance === null) {
         balance = FREE_TOKENS_ON_SIGNUP;
-        setStoredTokenBalance(user.uid, balance);
+        await setStoredTokenBalance(user.uid, balance);
         showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
     }
     updateTokenUI(balance);
 }
 
-function changeTokenBalance(amount) {
+// 6. Handle Math
+async function changeTokenBalance(amount) {
     const user = auth.currentUser;
     if (!user) return 0;
-    const current = getCurrentTokenBalance();
+    const current = await getCurrentTokenBalance();
     const next = Math.max(0, current + amount);
-    setStoredTokenBalance(user.uid, next);
+    await setStoredTokenBalance(user.uid, next);
     updateTokenUI(next);
     return next;
 }
 
-function spendTokens(amount) {
-    const current = getCurrentTokenBalance();
+async function spendTokens(amount) {
+    const current = await getCurrentTokenBalance();
     if (current < amount) return false;
-    changeTokenBalance(-amount);
+    await changeTokenBalance(-amount);
     return true;
 }
 
-function buyTokens(amount) {
+async function buyTokens(amount) {
     if (!auth.currentUser) {
         showNotification("Please sign in before buying tokens.");
         return;
@@ -104,60 +118,130 @@ function buyTokens(amount) {
         const ok = confirm(`Buy ${amount} token${amount !== 1 ? "s" : ""} for ${price}?`);
         if (!ok) return;
     }
-    const newBalance = changeTokenBalance(amount);
+    const newBalance = await changeTokenBalance(amount);
     showNotification(`Added ${amount} token${amount !== 1 ? "s" : ""}. You now have ${newBalance} token${newBalance !== 1 ? "s" : ""}.`);
 }
+
+// function getStoredTokenBalance(uid) {
+//     const raw = localStorage.getItem(getTokenStorageKey(uid));
+//     return raw === null ? null : parseInt(raw, 10) || 0;
+// }
+
+// function setStoredTokenBalance(uid, amount) {
+//     localStorage.setItem(getTokenStorageKey(uid), String(amount));
+// }
+
+// function getCurrentTokenBalance() {
+//     const user = auth.currentUser;
+//     if (!user) return 0;
+//     const stored = getStoredTokenBalance(user.uid);
+//     return stored === null ? FREE_TOKENS_ON_SIGNUP : stored;
+// }
+
+// function updateTokenUI(balance) {
+//     const tokenCount = document.getElementById("tokenCount");
+//     const tokenCountInline = document.getElementById("tokenCountInline");
+//     if (tokenCount) tokenCount.textContent = balance;
+//     if (tokenCountInline) tokenCountInline.textContent = balance;
+//     const generateBtn = document.getElementById("generateBtn");
+//     if (generateBtn) {
+//         generateBtn.disabled = balance < TOKENS_PER_GENERATION;
+//         generateBtn.title = balance < TOKENS_PER_GENERATION ? "Buy tokens to generate a gallery" : "";
+//     }
+// }
+
+// function ensureUserTokenBalance(user) {
+//     if (!user) return;
+//     let balance = getStoredTokenBalance(user.uid);
+//     if (balance === null) {
+//         balance = FREE_TOKENS_ON_SIGNUP;
+//         setStoredTokenBalance(user.uid, balance);
+//         showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
+//     }
+//     updateTokenUI(balance);
+// }
+
+// function changeTokenBalance(amount) {
+//     const user = auth.currentUser;
+//     if (!user) return 0;
+//     const current = getCurrentTokenBalance();
+//     const next = Math.max(0, current + amount);
+//     setStoredTokenBalance(user.uid, next);
+//     updateTokenUI(next);
+//     return next;
+// }
+
+// function spendTokens(amount) {
+//     const current = getCurrentTokenBalance();
+//     if (current < amount) return false;
+//     changeTokenBalance(-amount);
+//     return true;
+// }
+
+// function buyTokens(amount) {
+//     if (!auth.currentUser) {
+//         showNotification("Please sign in before buying tokens.");
+//         return;
+//     }
+//     const price = PURCHASE_PRICES[amount];
+//     if (price) {
+//         const ok = confirm(`Buy ${amount} token${amount !== 1 ? "s" : ""} for ${price}?`);
+//         if (!ok) return;
+//     }
+//     const newBalance = changeTokenBalance(amount);
+//     showNotification(`Added ${amount} token${amount !== 1 ? "s" : ""}. You now have ${newBalance} token${newBalance !== 1 ? "s" : ""}.`);
+// }
 
 
 // =========================================================
 //  AUTH STATE OBSERVER
 //  Fires automatically on every sign-in / sign-out event
 // =========================================================
-auth.onAuthStateChanged((user) => {
-    const authOverlay = document.getElementById("authOverlay");
-    const mainApp     = document.getElementById("mainApp");
+// auth.onAuthStateChanged((user) => {
+//     const authOverlay = document.getElementById("authOverlay");
+//     const mainApp     = document.getElementById("mainApp");
 
-    if (user) {
-        // ── Signed in ──────────────────────────────────────
-        // Smooth fade-out the auth overlay
-        authOverlay.style.transition    = "opacity 0.35s ease";
-        authOverlay.style.opacity       = "0";
-        authOverlay.style.pointerEvents = "none";
-        setTimeout(() => { authOverlay.style.display = "none"; }, 360);
+//     if (user) {
+//         // ── Signed in ──────────────────────────────────────
+//         // Smooth fade-out the auth overlay
+//         authOverlay.style.transition    = "opacity 0.35s ease";
+//         authOverlay.style.opacity       = "0";
+//         authOverlay.style.pointerEvents = "none";
+//         setTimeout(() => { authOverlay.style.display = "none"; }, 360);
 
-        // Reveal main app
-        mainApp.style.display = "flex";
+//         // Reveal main app
+//         mainApp.style.display = "flex";
 
-        // Populate user bar
-        const displayName = user.displayName || user.email.split("@")[0];
-        document.getElementById("userDisplayName").textContent = displayName;
-        document.getElementById("userEmailDisplay").textContent = user.email;
+//         // Populate user bar
+//         const displayName = user.displayName || user.email.split("@")[0];
+//         document.getElementById("userDisplayName").textContent = displayName;
+//         document.getElementById("userEmailDisplay").textContent = user.email;
 
-        const avatarImg    = document.getElementById("userAvatarImg");
-        const userInitials = document.getElementById("userInitials");
+//         const avatarImg    = document.getElementById("userAvatarImg");
+//         const userInitials = document.getElementById("userInitials");
 
-        if (user.photoURL) {
-            avatarImg.src          = user.photoURL;
-            avatarImg.style.display = "block";
-            userInitials.style.display = "none";
-        } else {
-            avatarImg.style.display    = "none";
-            userInitials.style.display = "flex";
-            userInitials.textContent   = displayName[0].toUpperCase();
-        }
+//         if (user.photoURL) {
+//             avatarImg.src          = user.photoURL;
+//             avatarImg.style.display = "block";
+//             userInitials.style.display = "none";
+//         } else {
+//             avatarImg.style.display    = "none";
+//             userInitials.style.display = "flex";
+//             userInitials.textContent   = displayName[0].toUpperCase();
+//         }
 
-        ensureUserTokenBalance(user);
+//         ensureUserTokenBalance(user);
 
-    } else {
-        // ── Signed out ─────────────────────────────────────
-        authOverlay.style.transition    = "";
-        authOverlay.style.display       = "flex";
-        authOverlay.style.opacity       = "1";
-        authOverlay.style.pointerEvents = "";
-        mainApp.style.display           = "none";
-        updateTokenUI(0);
-    }
-});
+//     } else {
+//         // ── Signed out ─────────────────────────────────────
+//         authOverlay.style.transition    = "";
+//         authOverlay.style.display       = "flex";
+//         authOverlay.style.opacity       = "1";
+//         authOverlay.style.pointerEvents = "";
+//         mainApp.style.display           = "none";
+//         updateTokenUI(0);
+//     }
+// });
 
 
 // =========================================================
@@ -477,7 +561,7 @@ document.getElementById("resetEmail").addEventListener("keydown", (e) => {
         // =========================
         // GENERATE GALLERY
         // =========================
-        function generateGallery() {
+      async function generateGallery() {
             const rawTitle = document.getElementById("galleryTitle").value.trim() || "My Selection Gallery";
             const title = escapeHtml(rawTitle);
             const password = document.getElementById("galleryPassword").value.trim();
@@ -489,7 +573,7 @@ document.getElementById("resetEmail").addEventListener("keydown", (e) => {
                 return;
             }
 
-            if (getCurrentTokenBalance() < TOKENS_PER_GENERATION) {
+            if (await getCurrentTokenBalance() < TOKENS_PER_GENERATION) {
                 showNotification("Not enough tokens. Buy tokens to generate a gallery.");
                 return;
             }
