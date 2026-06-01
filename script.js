@@ -119,7 +119,15 @@ window.addEventListener("offline", () => {
     isOnline = false;
     updateConnectionStatus();
     console.log("🔴 Internet connection lost");
-    showNotification("⚠️ You are offline. Changes will sync when back online.");
+    
+    // Automatically logout when internet is disconnected
+    auth.signOut().then(() => {
+        showNotification("⚠️ Internet disconnected. You have been logged out for security. Please reconnect and sign in again.");
+        console.log("✅ User logged out due to internet disconnection");
+    }).catch(error => {
+        console.error("❌ Error during logout:", error);
+        showNotification("Internet connection lost. Please refresh the page.");
+    });
 });
 
 function updateConnectionStatus() {
