@@ -566,6 +566,8 @@ function toggleAuthPw() {
 let uploadedImages = [];
 let uploadZoneInitialized = false; // Flag to prevent duplicate initialization
 let isProcessingFiles = false; // Flag to prevent concurrent file processing
+let isGalleryGenerated = false; // Flag to prevent duplicate gallery generation
+let lastGeneratedImageCount = 0; // Track the last generated image count
 
 function setupUploadZone() {
     // Prevent duplicate event listener initialization
@@ -768,6 +770,12 @@ function updatePreviewCount() {
         const estimatedSize = estimateFileSizeInBytes();
         const formattedSize = formatFileSize(estimatedSize);
         countText += ` • Estimated: ${formattedSize}`;
+        
+        // Reset generation flag if image count changed
+        if (count !== lastGeneratedImageCount && isGalleryGenerated) {
+            isGalleryGenerated = false;
+            console.log("♻️ Image count changed, generation flag reset");
+        }
     }
     
     document.getElementById("previewCount").textContent = countText;
@@ -776,6 +784,8 @@ function updatePreviewCount() {
 function clearImages() {
     uploadedImages = [];
     isProcessingFiles = false;
+    isGalleryGenerated = false;
+    lastGeneratedImageCount = 0;
     const fileInput = document.getElementById("imageFileInput");
     if (fileInput) {
         fileInput.value = "";
@@ -795,6 +805,12 @@ let generatedHTML = null;
 function generateGallery() {
     if (uploadedImages.length === 0) {
         showNotification("Please upload at least one image.");
+        return;
+    }
+
+    // Prevent duplicate generation with same images
+    if (isGalleryGenerated && uploadedImages.length === lastGeneratedImageCount) {
+        showNotification("⚠️ Gallery already generated with these images. Clear and upload new images to generate again.");
         return;
     }
 
@@ -1314,6 +1330,10 @@ ${passwordScript}
             spendTokens(TOKENS_PER_GENERATION);
             const downloadBtn = document.getElementById("downloadBtn");
             downloadBtn.classList.add("active");
+            
+            // Mark gallery as generated and track image count
+            isGalleryGenerated = true;
+            lastGeneratedImageCount = imageData.length;
             
             // Calculate actual file size
             const actualFileSize = new Blob([generatedHTML], { type: "text/html" }).size;
