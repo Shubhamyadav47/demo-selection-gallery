@@ -565,6 +565,7 @@ function toggleAuthPw() {
 
 let uploadedImages = [];
 let uploadZoneInitialized = false; // Flag to prevent duplicate initialization
+let isProcessingFiles = false; // Flag to prevent concurrent file processing
 
 function setupUploadZone() {
     // Prevent duplicate event listener initialization
@@ -581,37 +582,52 @@ function setupUploadZone() {
         return;
     }
 
-    // Create a handler function that prevents bubbling
+    // Handler for upload zone click
     const handleUploadClick = (e) => {
+        if (isProcessingFiles) {
+            console.log("⏳ Files already being processed, ignoring click");
+            return;
+        }
         e.stopPropagation();
+        e.preventDefault();
+        console.log("📁 Opening file picker...");
         fileInput.click();
     };
 
+    // Handler for drag over
     const handleDragOver = (e) => {
         e.preventDefault();
         e.stopPropagation();
         uploadZone.classList.add("drag-over");
     };
 
+    // Handler for drag leave
     const handleDragLeave = (e) => {
         e.preventDefault();
         e.stopPropagation();
         uploadZone.classList.remove("drag-over");
     };
 
+    // Handler for drop
     const handleDrop = (e) => {
         e.preventDefault();
         e.stopPropagation();
         uploadZone.classList.remove("drag-over");
-        handleFileSelect(e.dataTransfer.files);
+        if (!isProcessingFiles) {
+            console.log("📤 Files dropped, processing...");
+            handleFileSelect(e.dataTransfer.files);
+        }
     };
 
+    // Handler for file input change
     const handleFileInputChange = (e) => {
-        handleFileSelect(e.target.files);
-        // Reset the input value so the same file can be selected again
-        e.target.value = "";
+        if (!isProcessingFiles) {
+            console.log("📤 Files selected via dialog, processing...");
+            handleFileSelect(e.target.files);
+        }
     };
 
+    // Attach event listeners
     uploadZone.addEventListener("click", handleUploadClick);
     uploadZone.addEventListener("dragover", handleDragOver);
     uploadZone.addEventListener("dragleave", handleDragLeave);
@@ -628,8 +644,12 @@ function handleFileSelect(files) {
         document.getElementById("previewThumbs").innerHTML = "";
         document.getElementById("previewGrid").style.display = "none";
         document.getElementById("progressWrap").style.display = "none";
+        isProcessingFiles = false;
         return;
     }
+
+    // Set processing flag to prevent duplicate triggers
+    isProcessingFiles = true;
 
     uploadedImages = []; // Clear previous uploads
     const previewThumbs = document.getElementById("previewThumbs");
@@ -676,12 +696,21 @@ function handleFileSelect(files) {
                     setTimeout(() => {
                         progressWrap.style.display = "none";
                         updatePreviewCount();
+                        // Reset file input for re-upload capability
+                        const fileInput = document.getElementById("imageFileInput");
+                        if (fileInput) fileInput.value = "";
+                        // Clear processing flag after all files are processed
+                        isProcessingFiles = false;
+                        console.log("✅ File processing complete");
                     }, 300);
                 }
             } catch (error) {
                 console.error(`❌ Error processing file ${file.name}:`, error);
                 processedFiles++;
                 updateProgressBar(processedFiles, totalFiles, progressWrap);
+                if (processedFiles === totalFiles) {
+                    isProcessingFiles = false;
+                }
             }
         };
 
@@ -689,6 +718,9 @@ function handleFileSelect(files) {
             console.error(`❌ Failed to read file: ${file.name}`);
             processedFiles++;
             updateProgressBar(processedFiles, totalFiles, progressWrap);
+            if (processedFiles === totalFiles) {
+                isProcessingFiles = false;
+            }
         };
 
         reader.readAsDataURL(file);
@@ -743,10 +775,15 @@ function updatePreviewCount() {
 
 function clearImages() {
     uploadedImages = [];
-    document.getElementById("imageFileInput").value = "";
+    isProcessingFiles = false;
+    const fileInput = document.getElementById("imageFileInput");
+    if (fileInput) {
+        fileInput.value = "";
+    }
     document.getElementById("previewThumbs").innerHTML = "";
     document.getElementById("previewGrid").style.display = "none";
     document.getElementById("progressWrap").style.display = "none";
+    console.log("✅ Images cleared and ready for new upload");
 }
 
 // =========================================================
