@@ -54,6 +54,88 @@ const DISPLAY_PRICES = {
 };
 
 // =========================================================
+//  OFFLINE SUPPORT SYSTEM
+// =========================================================
+
+let isOnline = navigator.onLine;
+let offlineSyncQueue = [];
+
+function getOfflineSyncKey(uid) {
+    return `offlineSync_${uid}`;
+}
+
+function queueOfflineSync(uid, action) {
+    const queue = JSON.parse(localStorage.getItem(getOfflineSyncKey(uid)) || "[]");
+    queue.push({ ...action, timestamp: Date.now() });
+    localStorage.setItem(getOfflineSyncKey(uid), JSON.stringify(queue));
+}
+
+async function processOfflineSyncQueue(uid) {
+    const syncKey = getOfflineSyncKey(uid);
+    const queue = JSON.parse(localStorage.getItem(syncKey) || "[]");
+    
+    if (queue.length === 0) return;
+    
+    console.log(`🔄 Processing ${queue.length} offline sync tasks...`);
+    
+    for (const action of queue) {
+        try {
+            if (action.type === "saveTokens") {
+                await db.collection("users").doc(uid).set({
+                    tokens: action.tokens,
+                    lastUpdated: new Date(),
+                    displayName: auth.currentUser?.displayName || "",
+                    email: auth.currentUser?.email || ""
+                }, { merge: true });
+                console.log(`✅ Synced tokens: ${action.tokens}`);
+            } else if (action.type === "savePayment") {
+                await db.collection("users").doc(uid).collection("payments").add(action.paymentData);
+                console.log(`✅ Synced payment record`);
+            }
+        } catch (error) {
+            console.error(`❌ Failed to sync action:`, error);
+            break; // Stop if one fails, will retry later
+        }
+    }
+    
+    // Clear successfully synced items
+    localStorage.removeItem(syncKey);
+    showNotification("✅ Offline changes synced successfully!");
+}
+
+// Setup online/offline event listeners
+window.addEventListener("online", async () => {
+    isOnline = true;
+    updateConnectionStatus();
+    console.log("🟢 Internet connection restored");
+    
+    const user = auth.currentUser;
+    if (user) {
+        await processOfflineSyncQueue(user.uid);
+    }
+});
+
+window.addEventListener("offline", () => {
+    isOnline = false;
+    updateConnectionStatus();
+    console.log("🔴 Internet connection lost");
+    showNotification("⚠️ You are offline. Changes will sync when back online.");
+});
+
+function updateConnectionStatus() {
+    const statusEl = document.getElementById("connectionStatus");
+    if (statusEl) {
+        if (isOnline) {
+            statusEl.className = "connection-status online";
+            statusEl.innerHTML = '<span class="status-dot"></span>Online';
+        } else {
+            statusEl.className = "connection-status offline";
+            statusEl.innerHTML = '<span class="status-dot"></span>Offline Mode';
+        }
+    }
+}
+
+// =========================================================
 //  TOKEN MANAGEMENT - Local Storage + Firestore
 // =========================================================
 
@@ -71,6 +153,13 @@ function setStoredTokenBalance(uid, amount) {
 }
 
 async function saveTokensToFirestore(uid, tokens) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "saveTokens", tokens });
+        console.log("⏳ Tokens queued for sync (offline):", tokens);
+        return;
+    }
+    
     try {
         await db.collection("users").doc(uid).set({
             tokens: tokens,
@@ -81,10 +170,19 @@ async function saveTokensToFirestore(uid, tokens) {
         console.log("✅ Tokens saved to Firestore:", tokens);
     } catch (error) {
         console.error("❌ Error saving tokens to Firestore:", error);
+        // Queue for retry if online but Firestore fails
+        if (isOnline) {
+            queueOfflineSync(uid, { type: "saveTokens", tokens });
+        }
     }
 }
 
 async function loadTokensFromFirestore(uid) {
+    if (!isOnline) {
+        console.log("⏳ Offline mode - using local tokens only");
+        return null; // Use localStorage as fallback
+    }
+    
     try {
         const doc = await db.collection("users").doc(uid).get();
         if (doc.exists && doc.data().tokens) {
@@ -206,6 +304,13 @@ function initiateRazorpayPayment(tokenAmount, priceInPaise) {
 }
 
 async function savePaymentRecord(uid, paymentData) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
+        console.log("⏳ Payment record queued for sync (offline)");
+        return;
+    }
+    
     try {
         await db.collection("users").doc(uid).collection("payments").add({
             ...paymentData,
@@ -214,6 +319,8 @@ async function savePaymentRecord(uid, paymentData) {
         console.log("✅ Payment record saved to Firestore");
     } catch (error) {
         console.error("❌ Error saving payment record:", error);
+        // Queue for retry
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
     }
 }
 
@@ -527,10 +634,41 @@ function handleFileSelect(files) {
     });
 }
 
+function formatFileSize(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+function estimateFileSizeInBytes() {
+    // Estimate base HTML template size (includes all the styling and scripts)
+    let estimatedSize = 45000; // Approximate size of base HTML template
+    
+    // Add size of all Base64 images
+    uploadedImages.forEach(img => {
+        if (img.data) {
+            // Base64 string length is roughly the size in bytes when decoded
+            estimatedSize += img.data.length;
+        }
+    });
+    
+    return estimatedSize;
+}
+
 function updatePreviewCount() {
     const count = uploadedImages.length;
-    document.getElementById("previewCount").textContent = 
-        count + (count === 1 ? " image selected" : " images selected");
+    let countText = count + (count === 1 ? " image selected" : " images selected");
+    
+    // Add estimated file size
+    if (count > 0) {
+        const estimatedSize = estimateFileSizeInBytes();
+        const formattedSize = formatFileSize(estimatedSize);
+        countText += ` • Estimated: ${formattedSize}`;
+    }
+    
+    document.getElementById("previewCount").textContent = countText;
 }
 
 function clearImages() {
@@ -1069,7 +1207,12 @@ ${passwordScript}
             spendTokens(TOKENS_PER_GENERATION);
             const downloadBtn = document.getElementById("downloadBtn");
             downloadBtn.classList.add("active");
-            showNotification("Interactive Gallery Compiled! (" + imageData.length + " images embedded) — 1 token used.");
+            
+            // Calculate actual file size
+            const actualFileSize = new Blob([generatedHTML], { type: "text/html" }).size;
+            const formattedSize = formatFileSize(actualFileSize);
+            
+            showNotification(`✅ Gallery Generated! (${imageData.length} images • ${formattedSize}) — 1 token used.`);
 
         } catch (err) {
             showNotification("Error building gallery: " + err.message);
