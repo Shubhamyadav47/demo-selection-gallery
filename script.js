@@ -564,87 +564,144 @@ function toggleAuthPw() {
 // =========================================================
 
 let uploadedImages = [];
+let uploadZoneInitialized = false; // Flag to prevent duplicate initialization
 
 function setupUploadZone() {
+    // Prevent duplicate event listener initialization
+    if (uploadZoneInitialized) {
+        console.log("✅ Upload zone already initialized, skipping duplicate setup");
+        return;
+    }
+    
     const uploadZone = document.getElementById("uploadZone");
     const fileInput = document.getElementById("imageFileInput");
 
-    uploadZone.addEventListener("click", () => fileInput.click());
+    if (!uploadZone || !fileInput) {
+        console.error("❌ Upload zone or file input not found");
+        return;
+    }
 
-    uploadZone.addEventListener("dragover", (e) => {
+    // Create a handler function that prevents bubbling
+    const handleUploadClick = (e) => {
+        e.stopPropagation();
+        fileInput.click();
+    };
+
+    const handleDragOver = (e) => {
         e.preventDefault();
+        e.stopPropagation();
         uploadZone.classList.add("drag-over");
-    });
+    };
 
-    uploadZone.addEventListener("dragleave", () => {
-        uploadZone.classList.remove("drag-over");
-    });
-
-    uploadZone.addEventListener("drop", (e) => {
+    const handleDragLeave = (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.remove("drag-over");
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         uploadZone.classList.remove("drag-over");
         handleFileSelect(e.dataTransfer.files);
-    });
+    };
 
-    fileInput.addEventListener("change", (e) => {
+    const handleFileInputChange = (e) => {
         handleFileSelect(e.target.files);
-    });
+        // Reset the input value so the same file can be selected again
+        e.target.value = "";
+    };
+
+    uploadZone.addEventListener("click", handleUploadClick);
+    uploadZone.addEventListener("dragover", handleDragOver);
+    uploadZone.addEventListener("dragleave", handleDragLeave);
+    uploadZone.addEventListener("drop", handleDrop);
+    fileInput.addEventListener("change", handleFileInputChange);
+
+    uploadZoneInitialized = true;
+    console.log("✅ Upload zone initialized successfully");
 }
 
 function handleFileSelect(files) {
-    uploadedImages = [];
+    if (!files || files.length === 0) {
+        uploadedImages = [];
+        document.getElementById("previewThumbs").innerHTML = "";
+        document.getElementById("previewGrid").style.display = "none";
+        document.getElementById("progressWrap").style.display = "none";
+        return;
+    }
+
+    uploadedImages = []; // Clear previous uploads
     const previewThumbs = document.getElementById("previewThumbs");
     const previewGrid = document.getElementById("previewGrid");
     const progressWrap = document.getElementById("progressWrap");
 
     previewThumbs.innerHTML = "";
-
-    if (files.length === 0) {
-        previewGrid.style.display = "none";
-        progressWrap.style.display = "none";
-        return;
-    }
-
     previewGrid.style.display = "block";
     progressWrap.style.display = "block";
 
     const totalFiles = files.length;
     let processedFiles = 0;
+    const filesArray = Array.from(files);
 
-    Array.from(files).forEach((file, index) => {
+    filesArray.forEach((file, index) => {
+        // Validate file is actually an image
+        if (!file.type.startsWith("image/")) {
+            console.warn(`⚠️ Skipping non-image file: ${file.name}`);
+            return;
+        }
+
         const reader = new FileReader();
 
         reader.onload = (e) => {
-            uploadedImages[index] = {
-                name: file.name,
-                data: e.target.result
-            };
+            try {
+                uploadedImages[index] = {
+                    name: file.name,
+                    data: e.target.result
+                };
 
-            // Create preview thumbnail
-            const thumb = document.createElement("div");
-            thumb.className = "preview-thumb";
-            thumb.innerHTML = `
-                <img src="${e.target.result}" alt="${file.name}">
-                <div class="thumb-name">${file.name}</div>
-            `;
-            previewThumbs.appendChild(thumb);
+                // Create preview thumbnail
+                const thumb = document.createElement("div");
+                thumb.className = "preview-thumb";
+                thumb.innerHTML = `
+                    <img src="${e.target.result}" alt="${file.name}">
+                    <div class="thumb-name">${file.name}</div>
+                `;
+                previewThumbs.appendChild(thumb);
 
-            processedFiles++;
-            const percent = Math.round((processedFiles / totalFiles) * 100);
-            const progressFill = document.getElementById("progressFill");
-            progressFill.style.width = percent + "%";
-            document.getElementById("progressLabel").textContent = `Reading images… ${processedFiles} / ${totalFiles}`;
+                processedFiles++;
+                updateProgressBar(processedFiles, totalFiles, progressWrap);
 
-            if (processedFiles === totalFiles) {
-                setTimeout(() => {
-                    progressWrap.style.display = "none";
-                    updatePreviewCount();
-                }, 300);
+                if (processedFiles === totalFiles) {
+                    setTimeout(() => {
+                        progressWrap.style.display = "none";
+                        updatePreviewCount();
+                    }, 300);
+                }
+            } catch (error) {
+                console.error(`❌ Error processing file ${file.name}:`, error);
+                processedFiles++;
+                updateProgressBar(processedFiles, totalFiles, progressWrap);
             }
+        };
+
+        reader.onerror = () => {
+            console.error(`❌ Failed to read file: ${file.name}`);
+            processedFiles++;
+            updateProgressBar(processedFiles, totalFiles, progressWrap);
         };
 
         reader.readAsDataURL(file);
     });
+}
+
+function updateProgressBar(current, total, progressWrap) {
+    const percent = Math.round((current / total) * 100);
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    
+    if (progressFill) progressFill.style.width = percent + "%";
+    if (progressLabel) progressLabel.textContent = `Reading images… ${current} / ${total}`;
 }
 
 function formatFileSize(bytes) {
