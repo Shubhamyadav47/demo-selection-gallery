@@ -987,9 +987,10 @@ function generateGallery() {
                 src: img.data
             }));
 
-            const imageTags = imageData.map(img => `
-                <div class="gallery-item" data-name="${img.name}" role="button" tabindex="0" onclick="toggleSelection(this)" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSelection(this); }">
+            const imageTags = imageData.map((img, idx) => `
+                <div class="gallery-item" data-name="${img.name}" data-image-src="${img.src}" role="button" tabindex="0" onclick="event.stopPropagation(); if(!event.target.closest('.zoom-btn')) toggleSelection(this);" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSelection(this); }">
                     <img src="${img.src}" alt="${img.name}">
+                    <button class="zoom-btn" onclick="event.stopPropagation(); openZoomModal('${img.src}', '${img.name}');" title="Zoom photo">🔍</button>
                     <div class="overlay">
                         <span class="name">${img.name}</span>
                         <svg class="checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1057,7 +1058,7 @@ function generateGallery() {
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: var(--background);
-            padding: 20px;
+            padding: 0;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -1142,10 +1143,10 @@ function generateGallery() {
         }
 
         .gallery-header {
-            max-width: 900px;
             width: 100%;
             text-align: center;
             margin-bottom: 40px;
+            padding: 40px 20px 0;
         }
 
         .gallery-header h1 {
@@ -1162,31 +1163,35 @@ function generateGallery() {
         }
 
         .gallery-container {
-            max-width: 900px;
             width: 100%;
             background: var(--card-bg);
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
-            border: 1px solid var(--border-color);
+            border-radius: 0;
+            padding: 30px 20px;
+            box-shadow: none;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .gallery-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             gap: 16px;
             margin-bottom: 30px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .gallery-item {
             position: relative;
             overflow: hidden;
             border-radius: 12px;
-            aspect-ratio: 1;
             cursor: pointer;
             border: 2px solid var(--border-color);
             transition: all 0.3s ease;
             background: #f0f0f0;
+            min-height: 220px;
         }
 
         .gallery-item:hover {
@@ -1198,8 +1203,9 @@ function generateGallery() {
         .gallery-item img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             display: block;
+            background: #f5f5f5;
         }
 
         .gallery-item .overlay {
@@ -1258,8 +1264,12 @@ function generateGallery() {
             gap: 16px;
             padding: 20px;
             background: #F9FAFB;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
+            border-radius: 0;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 0 auto;
+            max-width: 1400px;
+            width: 100%;
         }
 
         .info-wrap {
@@ -1336,53 +1346,143 @@ function generateGallery() {
         #galleryContent { display: ${password ? "none" : "block"}; }
 
         @media(max-width: 640px) {
-            .action-bar { flex-direction: column; gap: 12px; padding: 12px; }
+            .action-bar { flex-direction: column; gap: 12px; padding: 12px; margin: 0 20px; }
             .action-buttons { width: 100%; }
             .action-btn { flex: 1; justify-content: center; }
-            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+            .gallery-header { padding: 30px 20px 20px; }
         }
 
         .zoom-btn {
             position: absolute;
             top: 12px;
-            left: 12px;
-            width: 38px;
-            height: 38px;
+            right: 12px;
+            width: 40px;
+            height: 40px;
             border: none;
             border-radius: 50%;
-            background: rgba(0,0,0,0.75);
+            background: rgba(79, 70, 229, 0.9);
             color: white;
-            font-size: 18px;
+            font-size: 20px;
             cursor: pointer;
-            z-index: 20;
+            z-index: 30;
             display: flex;
             align-items: center;
             justify-content: center;
             backdrop-filter: blur(6px);
             transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
         .zoom-btn:hover {
-            transform: scale(1.1);
-            background: rgba(0,0,0,0.9);
+            transform: scale(1.15);
+            background: rgba(79, 70, 229, 1);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
         }
 
         .zoom-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.94);
+            background: rgba(0,0,0,0.95);
             display: none;
             justify-content: center;
             align-items: center;
             z-index: 99999;
             padding: 20px;
+            overflow: hidden;
+        }
+
+        .zoom-overlay.show {
+            display: flex;
+        }
+
+        .zoom-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
         }
 
         .zoom-overlay img {
-            max-width: 96%;
-            max-height: 96%;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
-            border-radius: 12px;
+            border-radius: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100001;
+        }
+
+        .zoom-control-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .zoom-control-btn:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.1);
+        }
+
+        .close-zoom {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 100001;
+        }
+
+        .close-zoom:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.1);
+        }
+
+        .zoom-level {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 100001;
         }
     </style>
 </head>
@@ -1471,22 +1571,96 @@ ${loginHTML}
         window.open("https://wa.me/" + myWhatsAppNumber + "?text=" + message, '_blank');
     }
 
-    function openZoom(src) {
-        document.getElementById("zoomedImage").src = src;
-        document.getElementById("zoomOverlay").style.display = "flex";
+    let currentZoomLevel = 1;
+    const MIN_ZOOM = 0.5;
+    const MAX_ZOOM = 4;
+    const ZOOM_STEP = 0.2;
+
+    function openZoomModal(src, name) {
+        currentZoomLevel = 1;
+        const overlay = document.getElementById("zoomOverlay");
+        const img = document.getElementById("zoomedImage");
+        img.src = src;
+        img.style.transform = 'scale(1)';
+        overlay.classList.add("show");
         document.body.style.overflow = "hidden";
+        updateZoomLevel();
     }
 
-    function closeZoom() {
-        document.getElementById("zoomOverlay").style.display = "none";
+    function closeZoomModal() {
+        const overlay = document.getElementById("zoomOverlay");
+        overlay.classList.remove("show");
         document.body.style.overflow = "auto";
+        currentZoomLevel = 1;
     }
+
+    function zoomIn() {
+        if (currentZoomLevel < MAX_ZOOM) {
+            currentZoomLevel += ZOOM_STEP;
+            updateZoomDisplay();
+        }
+    }
+
+    function zoomOut() {
+        if (currentZoomLevel > MIN_ZOOM) {
+            currentZoomLevel -= ZOOM_STEP;
+            updateZoomDisplay();
+        }
+    }
+
+    function resetZoom() {
+        currentZoomLevel = 1;
+        updateZoomDisplay();
+    }
+
+    function updateZoomDisplay() {
+        const img = document.getElementById("zoomedImage");
+        if (img) {
+            img.style.transform = 'scale(' + currentZoomLevel.toFixed(2) + ')';
+        }
+        updateZoomLevel();
+    }
+
+    function updateZoomLevel() {
+        const levelEl = document.getElementById("zoomLevel");
+        if (levelEl) {
+            levelEl.textContent = Math.round(currentZoomLevel * 100) + '%';
+        }
+    }
+
+    // Keyboard shortcuts for zoom
+    document.addEventListener('keydown', function(e) {
+        const overlay = document.getElementById("zoomOverlay");
+        if (!overlay || !overlay.classList.contains("show")) return;
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn(); }
+        else if (e.key === '-') { e.preventDefault(); zoomOut(); }
+        else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeZoomModal(); }
+    });
+
+    // Mouse wheel zoom
+    document.addEventListener('wheel', function(e) {
+        const overlay = document.getElementById("zoomOverlay");
+        if (!overlay || !overlay.classList.contains("show")) return;
+        e.preventDefault();
+        if (e.deltaY < 0) { zoomIn(); }
+        else { zoomOut(); }
+    }, { passive: false });
 <\/script>
 
 ${passwordScript}
 
-<div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
-    <img id="zoomedImage" src="">
+<div class="zoom-overlay" id="zoomOverlay" onclick="if(event.target === event.currentTarget) closeZoomModal();">
+    <button class="close-zoom" onclick="closeZoomModal()" title="Close (ESC)">✕</button>
+    <div class="zoom-controls">
+        <button class="zoom-control-btn" onclick="zoomOut()" title="Zoom Out (- key or scroll)">−</button>
+        <button class="zoom-control-btn" onclick="resetZoom()" title="Reset Zoom (0 key)">⟲</button>
+        <button class="zoom-control-btn" onclick="zoomIn()" title="Zoom In (+ key or scroll)">+</button>
+    </div>
+    <div class="zoom-container">
+        <img id="zoomedImage" src="" alt="Zoomed image">
+    </div>
+    <div class="zoom-level" id="zoomLevel">100%</div>
 </div>
 
 </body>
