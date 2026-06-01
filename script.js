@@ -23,8 +23,16 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
-const FREE_TOKENS_ON_SIGNUP = 5;
+const FREE_TOKENS_ON_SIGNUP = 2;
 const TOKENS_PER_GENERATION = 1;
+
+// Purchase price table: amount -> price
+const PURCHASE_PRICES = {
+    1: 25,
+    5: 99,
+    10: 179,
+    25: 499,
+};
 
 function getTokenStorageKey(uid) {
     return `galleryTokenBalance_${uid}`;
@@ -91,8 +99,13 @@ function buyTokens(amount) {
         showNotification("Please sign in before buying tokens.");
         return;
     }
+    const price = PURCHASE_PRICES[amount];
+    if (price) {
+        const ok = confirm(`Buy ${amount} token${amount !== 1 ? "s" : ""} for ${price}?`);
+        if (!ok) return;
+    }
     const newBalance = changeTokenBalance(amount);
-    showNotification(`Added ${amount} tokens. You now have ${newBalance} tokens.`);
+    showNotification(`Added ${amount} token${amount !== 1 ? "s" : ""}. You now have ${newBalance} token${newBalance !== 1 ? "s" : ""}.`);
 }
 
 
