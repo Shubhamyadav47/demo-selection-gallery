@@ -144,7 +144,154 @@ function updateConnectionStatus() {
 }
 
 // =========================================================
-//  TOKEN MANAGEMENT - Local Storage + Firestore
+//  COOKIE MANAGEMENT UTILITIES
+// =========================================================
+
+/**
+ * Set a cookie with optional expiration
+ * @param {string} name - Cookie name
+ * @param {string} value - Cookie value
+ * @param {number} days - Days until expiration (default: 30 days)
+ * @param {boolean} secure - Use secure flag (default: true)
+ */
+function setCookie(name, value, days = 30, secure = true) {
+    try {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + date.toUTCString();
+        const secureFrag = secure && location.protocol === "https:" ? "; Secure" : "";
+        const sameSite = "; SameSite=Strict";
+        document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}${secureFrag}${sameSite}; path=/`;
+        console.log(`✅ Cookie set: ${name}`);
+    } catch (error) {
+        console.error(`❌ Error setting cookie ${name}:`, error);
+    }
+}
+
+/**
+ * Get a cookie value by name
+ * @param {string} name - Cookie name
+ * @returns {string|null} - Cookie value or null if not found
+ */
+function getCookie(name) {
+    try {
+        const nameEQ = encodeURIComponent(name) + "=";
+        const cookies = document.cookie.split(";");
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.indexOf(nameEQ) === 0) {
+                return decodeURIComponent(cookie.substring(nameEQ.length));
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error(`❌ Error getting cookie ${name}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Delete a cookie
+ * @param {string} name - Cookie name
+ */
+function deleteCookie(name) {
+    try {
+        setCookie(name, "", -1);
+        console.log(`✅ Cookie deleted: ${name}`);
+    } catch (error) {
+        console.error(`❌ Error deleting cookie ${name}:`, error);
+    }
+}
+
+/**
+ * Store token balance in cookie
+ * @param {string} uid - User ID
+ * @param {number} tokens - Token amount
+ */
+function setTokenCookie(uid, tokens) {
+    if (!uid) return;
+    const cookieName = `token_${uid}`;
+    setCookie(cookieName, String(tokens), 30);
+}
+
+/**
+ * Retrieve token balance from cookie
+ * @param {string} uid - User ID
+ * @returns {number|null} - Token amount or null
+ */
+function getTokenCookie(uid) {
+    if (!uid) return null;
+    const cookieName = `token_${uid}`;
+    const value = getCookie(cookieName);
+    return value !== null ? parseInt(value, 10) : null;
+}
+
+/**
+ * Store authentication token in cookie
+ * @param {string} token - Auth token
+ */
+function setAuthTokenCookie(token) {
+    if (!token) return;
+    setCookie("authToken", token, 7); // Auth tokens expire in 7 days
+}
+
+/**
+ * Retrieve authentication token from cookie
+ * @returns {string|null} - Auth token or null
+ */
+function getAuthTokenCookie() {
+    return getCookie("authToken");
+}
+
+/**
+ * Store user session in cookie
+ * @param {object} user - User object
+ */
+function setUserSessionCookie(user) {
+    if (!user) return;
+    const sessionData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || "",
+        photoURL: user.photoURL || "",
+        timestamp: Date.now()
+    };
+    setCookie("userSession", JSON.stringify(sessionData), 30);
+}
+
+/**
+ * Retrieve user session from cookie
+ * @returns {object|null} - User session object or null
+ */
+function getUserSessionCookie() {
+    const session = getCookie("userSession");
+    try {
+        return session ? JSON.parse(session) : null;
+    } catch (error) {
+        console.error("❌ Error parsing user session cookie:", error);
+        return null;
+    }
+}
+
+/**
+ * Clear all app-related cookies
+ */
+function clearAllCookies() {
+    try {
+        const user = auth.currentUser;
+        if (user) {
+            deleteCookie(`token_${user.uid}`);
+        }
+        deleteCookie("authToken");
+        deleteCookie("userSession");
+        console.log("✅ All cookies cleared");
+    } catch (error) {
+        console.error("❌ Error clearing cookies:", error);
+    }
+}
+
+// =========================================================
+//  TOKEN MANAGEMENT - Local Storage + Firestore + Cookies
 // =========================================================
 
 function getTokenStorageKey(uid) {
@@ -158,6 +305,8 @@ function getStoredTokenBalance(uid) {
 
 function setStoredTokenBalance(uid, amount) {
     localStorage.setItem(getTokenStorageKey(uid), String(amount));
+    // Also store in cookie for cross-tab synchronization
+    setTokenCookie(uid, amount);
 }
 
 async function saveTokensToFirestore(uid, tokens) {
@@ -230,6 +379,8 @@ function ensureUserTokenBalance(user) {
         saveTokensToFirestore(user.uid, balance);
         showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
     }
+    // Ensure cookie is synced
+    setTokenCookie(user.uid, balance);
     updateTokenUI(balance);
 }
 
@@ -357,6 +508,9 @@ auth.onAuthStateChanged(async (user) => {
 
     if (user) {
         // ── Signed in ──────────────────────────────────────
+        // Store user session in cookie
+        setUserSessionCookie(user);
+        
         // Smooth fade-out the auth overlay
         authOverlay.style.transition    = "opacity 0.35s ease";
         authOverlay.style.opacity       = "0";
@@ -398,6 +552,9 @@ auth.onAuthStateChanged(async (user) => {
 
     } else {
         // ── Signed out ─────────────────────────────────────
+        // Clear all cookies on logout
+        clearAllCookies();
+        
         authOverlay.style.transition    = "";
         authOverlay.style.display       = "flex";
         authOverlay.style.opacity       = "1";
@@ -527,6 +684,7 @@ async function signInWithGoogle() {
 }
 
 function logout() {
+    clearAllCookies();
     auth.signOut().catch(error => {
         console.error("Logout error:", error);
         showNotification("Error logging out.");
