@@ -2,235 +2,556 @@
 // =========================================================
 //  FIREBASE CONFIGURATION
 //  ─────────────────────────────────────────────────────────
-let generatedHTML = null;
+//  🔑 IMPORTANT: Replace these values with your Firebase config
+//  1. Open https://console.firebase.google.com
+//  2. Create (or open) a project
+//  3. Project Settings → Your Apps → Add Web App → copy config
+//  4. Authentication → Sign-in method → enable:
+//       ✅  Email / Password
+//       ✅  Google
+//  5. Firestore Database → Create Database
+// =========================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDuupLK07-FteOsI-vOlA6qjNmteDj07ew",
+  authDomain: "gallery-photo-selection.firebaseapp.com",
+  projectId: "gallery-photo-selection",
+  storageBucket: "gallery-photo-selection.firebasestorage.app",
+  messagingSenderId: "100096652204",
+  appId: "1:100096652204:web:fe2ec60567d88782be8009",
+  measurementId: "G-VC6ERLG4BC"
+};
 
-function generateGallery() {
-    if (uploadedImages.length === 0) {
-        showNotification("Please upload at least one image.");
-        return;
-    }
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore(); // Initialize Firestore
 
-    if (isGalleryGenerated && uploadedImages.length === lastGeneratedImageCount) {
-        showNotification("⚠️ Gallery already generated with these images. Clear and upload new images to generate again.");
-        return;
-    }
+// =========================================================
+//  RAZORPAY CONFIGURATION
+//  ─────────────────────────────────────────────────────────
+//  🔑 IMPORTANT: Replace with your Razorpay Key ID
+//  Get it from: https://dashboard.razorpay.com/app/settings/api-keys
+// =========================================================
+const RAZORPAY_KEY_ID = "rzp_live_SwGNmwWnuOPH5e"; // Replace with your actual Key ID
+const RAZORPAY_API_URL = "https://api.razorpay.com/v1"; // Razorpay API endpoint
 
-    const rawTitle = (document.getElementById("galleryTitle").value || "").trim() || "My Selection Gallery";
-    const password = (document.getElementById("galleryPassword").value || "").trim();
-    const waNumber = (document.getElementById("whatsappNumber").value || "").trim().replace(/[^0-9]/g, "");
+const FREE_TOKENS_ON_SIGNUP = 2;
+const TOKENS_PER_GENERATION = 1;
 
-    const btn = document.getElementById("generateBtn");
-    btn.disabled = true;
-    btn.innerHTML = `Building gallery…`;
+// Purchase price table: amount -> price (in paise, so 2500 = ₹25)
+const PURCHASE_PRICES = {
+    1: 2500,    // ₹25
+    5: 9900,    // ₹99
+    10: 17900,  // ₹179
+    25: 49900,  // ₹499
+};
 
-    // small helper to escape HTML inside the generated file
-    function escapeHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
+// Display prices in Rupees (for UI)
+const DISPLAY_PRICES = {
+    1: 25,
+    5: 99,
+    10: 179,
+    25: 499,
+};
 
-    setTimeout(() => {
-        try {
-            const imageTags = uploadedImages.map(({ name, data }) => {
-                const escapedName = escapeHtml(name || "");
-                const jsSafeName = escapedName.replace(/'/g, "\\'").replace(/\"/g, '&quot;');
-                return `
-                <div class="photo-card" data-name="${jsSafeName}" onclick="toggleSelection(this)">
-    <div class="image-wrapper">
-        <div class="fallback-placeholder">${escapedName}</div>
-        <button class="zoom-btn" onclick="event.stopPropagation(); openZoom(this.closest('.photo-card').querySelector('img').src)">🔍</button>
-        <img src="${data}" alt="${escapedName}" loading="lazy">
-    </div>
-    <div class="photo-name">${escapedName}</div>
-</div>`;
-            }).join("");
+// =========================================================
+//  OFFLINE SUPPORT SYSTEM
+// =========================================================
 
-            const escapedTitle = escapeHtml(rawTitle);
-            const escapedPasswordJs = password.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+let isOnline = navigator.onLine;
+let offlineSyncQueue = [];
 
-            const loginHTML = password ? `
-            <div id="loginScreen" class="login-screen">
-                <div class="login-card">
-                    <div class="lock-icon">🔒</div>
-                    <h2>Private Gallery</h2>
-                    <p>Enter the passcode to view and select your photos.</p>
-                    <input type="password" id="passwordInput" placeholder="Password Access">
-                    <button class="btn-primary" onclick="checkPassword()">Unlock Gallery</button>
-                    <div id="loginError" class="login-error">Incorrect password. Please try again.</div>
-                </div>
-            </div>` : "";
-
-            const passwordScript = password ? `
-            <script>
-            const correctPassword = "${escapedPasswordJs}";
-            function checkPassword() {
-                const entered = document.getElementById("passwordInput").value;
-                const errorDiv = document.getElementById("loginError");
-                if (entered === correctPassword) {
-                    document.getElementById("loginScreen").style.display = "none";
-                    document.getElementById("galleryContent").style.display = "block";
-                } else {
-                    errorDiv.style.opacity = "1";
-                    setTimeout(() => { errorDiv.style.opacity = "0"; }, 3000);
-                }
-            }
-            document.getElementById("passwordInput")?.addEventListener("keyup", function(event) {
-                if (event.key === "Enter") { checkPassword(); }
-            });
-            <\/script>` : "";
-
-            generatedHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapedTitle}</title>
-    <style>
-        :root { --primary: #111827; --primary-hover: #1F2937; --accent: #10B981; --accent-hover: #059669; --bg-main: #F9FAFB; --bg-card: #FFFFFF; --text-title: #111827; --text-body: #4B5563; --border-color: #E5E7EB; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-main); color: var(--text-title); line-height: 1.5; padding-bottom: 90px; }
-        /* Minimal styles kept from template (omitted here for brevity in-file) */
-        .photo-card { background-color: var(--bg-card); border: 2px solid transparent; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.25s ease; position: relative; }
-        .image-wrapper { position: relative; width: 100%; background-color: #F3F4F6; display: flex; align-items: center; justify-content: center; padding: 10px; min-height: 260px; }
-        .fallback-placeholder { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #E5E7EB; color: #6B7280; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; padding: 16px; text-align: center; box-sizing: border-box; word-break: break-all; z-index: 1; }
-        .photo-card img { position: relative; max-width: 100%; max-height: 80vh; width: auto; height: auto; object-fit: contain; display: block; transition: transform 0.4s ease; z-index: 2; }
-        .photo-name { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #374151; text-align: center; border-top: 1px solid var(--border-color); background-color: var(--bg-card); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-        .photo-card.selected { border-color: var(--accent); transform: scale(0.98); box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
-        .photo-card.selected::after { content: "✓ Selected"; position: absolute; top: 12px; right: 12px; background-color: var(--accent); color: white; padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-transform: uppercase; letter-spacing: 0.05em; z-index: 10; }
-        .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-color); padding: 16px 24px; box-shadow: 0 -10px 15px -3px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; z-index: 999; }
-        .action-bar .info-wrap { display: flex; flex-direction: column; }
-        .action-bar span.counter { font-size: 18px; font-weight: 800; color: var(--primary); }
-        .action-bar p.help-text { font-size: 12px; color: var(--text-body); }
-        .action-buttons { display: flex; gap: 12px; }
-        .action-btn { padding: 12px 20px; font-size: 14px; font-weight: 700; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 8px; }
-        .btn-copy { background-color: #E5E7EB; color: #374151; }
-        .btn-send-wa { background-color: var(--accent); color: white; }
-        .zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.94); display: none; justify-content: center; align-items: center; z-index: 99999; padding: 20px; }
-        .zoom-overlay img { max-width: 96%; max-height: 96%; object-fit: contain; border-radius: 12px; }
-    </style>
-</head>
-<body>
-
-${loginHTML}
-
-<div id="galleryContent">
-    <header class="gallery-header">
-        <h1>${escapedTitle}</h1>
-        <p>Select your favorite photos by clicking/tapping them. Once completed, share or copy the final list from the bottom action panel.</p>
-    </header>
-
-    <div class="gallery-container">
-        <div class="gallery-grid">
-            ${imageTags}
-        </div>
-    </div>
-
-    <div class="action-bar">
-        <div class="info-wrap">
-            <span class="counter" id="count">0 Photos Selected</span>
-            <p class="help-text">Click images to select/deselect</p>
-        </div>
-        <div class="action-buttons">
-            <button class="action-btn btn-copy" onclick="copyListToClipboard()">Copy Selection</button>
-            ${waNumber ? `
-            <button class="action-btn btn-send-wa" onclick="sendToWhatsApp()">Send via WhatsApp</button>` : ``}
-        </div>
-    </div>
-</div>
-
-<div id="toast" class="toast-notify">Selection Copied!</div>
-
-<script>
-    let selectedPhotos = new Set();
-    const myWhatsAppNumber = "${waNumber}";
-
-    function toggleSelection(element) {
-        const photoName = element.getAttribute('data-name') || element.querySelector('.photo-name')?.textContent || '';
-        if (selectedPhotos.has(photoName)) {
-            selectedPhotos.delete(photoName);
-            element.classList.remove('selected');
-        } else {
-            selectedPhotos.add(photoName);
-            element.classList.add('selected');
-        }
-        document.getElementById('count').innerText = selectedPhotos.size + " Photos Selected";
-    }
-
-    function showToast(text) {
-        const toast = document.getElementById("toast");
-        toast.innerText = text;
-        toast.classList.add("show");
-        setTimeout(() => { toast.classList.remove("show"); }, 2500);
-    }
-
-    function getFormattedText() {
-        if (selectedPhotos.size === 0) return "";
-        return Array.from(selectedPhotos)
-            .map(name => name.replace(/\\s*\\([^)]*\\)(?=\\.[^.]+$)/i, '').replace(/\\.[^/.]+$/, ".JPG"))
-            .join(" OR ");
-    }
-
-    function copyListToClipboard() {
-        if (selectedPhotos.size === 0) { showToast("Please select at least one photo first!"); return; }
-        const textToCopy = getFormattedText();
-        const tempTextarea = document.createElement("textarea");
-        tempTextarea.value = textToCopy;
-        document.body.appendChild(tempTextarea);
-        tempTextarea.select();
-        try { document.execCommand('copy'); showToast("Selection list copied to clipboard!"); }
-        catch (err) { showToast("Failed to copy list."); }
-        document.body.removeChild(tempTextarea);
-    }
-
-    function sendToWhatsApp() {
-        if (selectedPhotos.size === 0) { showToast("Please select at least one photo first!"); return; }
-        const message = encodeURIComponent(getFormattedText());
-        window.open("https://wa.me/" + myWhatsAppNumber + "?text=" + message, '_blank');
-    }
-
-    function openZoom(src) {
-        document.getElementById("zoomedImage").src = src;
-        document.getElementById("zoomOverlay").style.display = "flex";
-        document.body.style.overflow = "hidden";
-    }
-
-    function closeZoom() {
-        document.getElementById("zoomOverlay").style.display = "none";
-        document.body.style.overflow = "auto";
-    }
-<\/script>
-
-${passwordScript}
-
-<div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
-    <img id="zoomedImage" src="">
-</div>
-
-</body>
-</html>`;
-
-            const downloadBtn = document.getElementById("downloadBtn");
-            downloadBtn.classList.add("active");
-            // mark generated
-            isGalleryGenerated = true;
-            lastGeneratedImageCount = uploadedImages.length;
-
-            const actualFileSize = new Blob([generatedHTML], { type: "text/html" }).size;
-            showNotification(`✅ Gallery Generated! (${uploadedImages.length} images • ${formatFileSize(actualFileSize)}) — 1 token used.`);
-
-        } catch (err) {
-            showNotification("Error building gallery: " + err.message);
-            console.error(err);
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = `<svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg> Generate HTML Code`;
-        }
-    }, 50);
+function getOfflineSyncKey(uid) {
+    return `offlineSync_${uid}`;
 }
+
+function queueOfflineSync(uid, action) {
+    const queue = JSON.parse(localStorage.getItem(getOfflineSyncKey(uid)) || "[]");
+    queue.push({ ...action, timestamp: Date.now() });
+    localStorage.setItem(getOfflineSyncKey(uid), JSON.stringify(queue));
+}
+
+async function processOfflineSyncQueue(uid) {
+    const syncKey = getOfflineSyncKey(uid);
+    const queue = JSON.parse(localStorage.getItem(syncKey) || "[]");
+    
+    if (queue.length === 0) return;
+    
+    console.log(`🔄 Processing ${queue.length} offline sync tasks...`);
+    
+    for (const action of queue) {
+        try {
+            if (action.type === "saveTokens") {
+                await db.collection("users").doc(uid).set({
+                    tokens: action.tokens,
+                    lastUpdated: new Date(),
+                    displayName: auth.currentUser?.displayName || "",
+                    email: auth.currentUser?.email || ""
+                }, { merge: true });
+                console.log(`✅ Synced tokens: ${action.tokens}`);
+            } else if (action.type === "savePayment") {
+                await db.collection("users").doc(uid).collection("payments").add(action.paymentData);
+                console.log(`✅ Synced payment record`);
+            }
+        } catch (error) {
+            console.error(`❌ Failed to sync action:`, error);
+            break; // Stop if one fails, will retry later
+        }
+    }
+    
+    // Clear successfully synced items
+    localStorage.removeItem(syncKey);
+    showNotification("✅ Offline changes synced successfully!");
+}
+
+// Setup online/offline event listeners
+window.addEventListener("online", async () => {
+    isOnline = true;
+    updateConnectionStatus();
+    console.log("🟢 Internet connection restored");
+    
+    const user = auth.currentUser;
+    if (user) {
+        await processOfflineSyncQueue(user.uid);
+    }
+});
+
+window.addEventListener("offline", () => {
+    isOnline = false;
+    updateConnectionStatus();
+    console.log("🔴 Internet connection lost");
+    
+    // Automatically logout when internet is disconnected
+    auth.signOut().then(() => {
+        showNotification("⚠️ Internet disconnected. You have been logged out for security. Please reconnect and sign in again.");
+        console.log("✅ User logged out due to internet disconnection");
+    }).catch(error => {
+        console.error("❌ Error during logout:", error);
+        showNotification("Internet connection lost. Please refresh the page.");
+    });
+});
+
+function updateConnectionStatus() {
+    const statusEl = document.getElementById("connectionStatus");
+    if (statusEl) {
+        if (isOnline) {
+            statusEl.className = "connection-status online";
+            statusEl.innerHTML = '<span class="status-dot"></span>Online';
+        } else {
+            statusEl.className = "connection-status offline";
+            statusEl.innerHTML = '<span class="status-dot"></span>Offline Mode';
+        }
+    }
+}
+
+// =========================================================
+//  COOKIE MANAGEMENT UTILITIES
+// =========================================================
+
+/**
+ * Set a cookie with optional expiration
+ * @param {string} name - Cookie name
+ * @param {string} value - Cookie value
+ * @param {number} days - Days until expiration (default: 30 days)
+ * @param {boolean} secure - Use secure flag (default: true)
+ */
+function setCookie(name, value, days = 30, secure = true) {
+    try {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + date.toUTCString();
+        const secureFrag = secure && location.protocol === "https:" ? "; Secure" : "";
+        const sameSite = "; SameSite=Strict";
+        document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}${secureFrag}${sameSite}; path=/`;
+        console.log(`✅ Cookie set: ${name}`);
+    } catch (error) {
+        console.error(`❌ Error setting cookie ${name}:`, error);
+    }
+}
+
+/**
+ * Get a cookie value by name
+ * @param {string} name - Cookie name
+ * @returns {string|null} - Cookie value or null if not found
+ */
+function getCookie(name) {
+    try {
+        const nameEQ = encodeURIComponent(name) + "=";
+        const cookies = document.cookie.split(";");
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.indexOf(nameEQ) === 0) {
+                return decodeURIComponent(cookie.substring(nameEQ.length));
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error(`❌ Error getting cookie ${name}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Delete a cookie
+ * @param {string} name - Cookie name
+ */
+function deleteCookie(name) {
+    try {
+        setCookie(name, "", -1);
+        console.log(`✅ Cookie deleted: ${name}`);
+    } catch (error) {
+        console.error(`❌ Error deleting cookie ${name}:`, error);
+    }
+}
+
+/**
+ * Store token balance in cookie
+ * @param {string} uid - User ID
+ * @param {number} tokens - Token amount
+ */
+function setTokenCookie(uid, tokens) {
+    if (!uid) return;
+    const cookieName = `token_${uid}`;
+    setCookie(cookieName, String(tokens), 30);
+}
+
+/**
+ * Retrieve token balance from cookie
+ * @param {string} uid - User ID
+ * @returns {number|null} - Token amount or null
+ */
+function getTokenCookie(uid) {
+    if (!uid) return null;
+    const cookieName = `token_${uid}`;
+    const value = getCookie(cookieName);
+    return value !== null ? parseInt(value, 10) : null;
+}
+
+/**
+ * Store authentication token in cookie
+ * @param {string} token - Auth token
+ */
+function setAuthTokenCookie(token) {
+    if (!token) return;
+    setCookie("authToken", token, 7); // Auth tokens expire in 7 days
+}
+
+/**
+ * Retrieve authentication token from cookie
+ * @returns {string|null} - Auth token or null
+ */
+function getAuthTokenCookie() {
+    return getCookie("authToken");
+}
+
+/**
+ * Store user session in cookie
+ * @param {object} user - User object
+ */
+function setUserSessionCookie(user) {
+    if (!user) return;
+    const sessionData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || "",
+        photoURL: user.photoURL || "",
+        timestamp: Date.now()
+    };
+    setCookie("userSession", JSON.stringify(sessionData), 30);
+}
+
+/**
+ * Retrieve user session from cookie
+ * @returns {object|null} - User session object or null
+ */
+function getUserSessionCookie() {
+    const session = getCookie("userSession");
+    try {
+        return session ? JSON.parse(session) : null;
+    } catch (error) {
+        console.error("❌ Error parsing user session cookie:", error);
+        return null;
+    }
+}
+
+/**
+ * Clear all app-related cookies
+ */
+function clearAllCookies() {
+    try {
+        const user = auth.currentUser;
+        if (user) {
+            deleteCookie(`token_${user.uid}`);
+        }
+        deleteCookie("authToken");
+        deleteCookie("userSession");
+        console.log("✅ All cookies cleared");
+    } catch (error) {
+        console.error("❌ Error clearing cookies:", error);
+    }
+}
+
+// =========================================================
+//  TOKEN MANAGEMENT - Local Storage + Firestore + Cookies
+// =========================================================
+
+function getTokenStorageKey(uid) {
+    return `galleryTokenBalance_${uid}`;
+}
+
+function getStoredTokenBalance(uid) {
+    const raw = localStorage.getItem(getTokenStorageKey(uid));
+    return raw === null ? null : parseInt(raw, 10) || 0;
+}
+
+function setStoredTokenBalance(uid, amount) {
+    localStorage.setItem(getTokenStorageKey(uid), String(amount));
+    // Also store in cookie for cross-tab synchronization
+    setTokenCookie(uid, amount);
+}
+
+async function saveTokensToFirestore(uid, tokens) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "saveTokens", tokens });
+        console.log("⏳ Tokens queued for sync (offline):", tokens);
+        return;
+    }
+    
+    try {
+        await db.collection("users").doc(uid).set({
+            tokens: tokens,
+            lastUpdated: new Date(),
+            displayName: auth.currentUser?.displayName || "",
+            email: auth.currentUser?.email || ""
+        }, { merge: true });
+        console.log("✅ Tokens saved to Firestore:", tokens);
+    } catch (error) {
+        console.error("❌ Error saving tokens to Firestore:", error);
+        // Queue for retry if online but Firestore fails
+        if (isOnline) {
+            queueOfflineSync(uid, { type: "saveTokens", tokens });
+        }
+    }
+}
+
+async function loadTokensFromFirestore(uid) {
+    if (!isOnline) {
+        console.log("⏳ Offline mode - using local tokens only");
+        return null; // Use localStorage as fallback
+    }
+    
+    try {
+        const doc = await db.collection("users").doc(uid).get();
+        if (doc.exists && doc.data().tokens) {
+            return doc.data().tokens;
+        }
+    } catch (error) {
+        console.error("❌ Error loading tokens from Firestore:", error);
+    }
+    return null;
+}
+
+function getCurrentTokenBalance() {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const stored = getStoredTokenBalance(user.uid);
+    return stored === null ? FREE_TOKENS_ON_SIGNUP : stored;
+}
+
+function updateTokenUI(balance) {
+    const tokenCount = document.getElementById("tokenCount");
+    const tokenCountInline = document.getElementById("tokenCountInline");
+    if (tokenCount) tokenCount.textContent = balance;
+    if (tokenCountInline) tokenCountInline.textContent = balance;
+    const generateBtn = document.getElementById("generateBtn");
+    if (generateBtn) {
+        generateBtn.disabled = balance < TOKENS_PER_GENERATION;
+        generateBtn.title = balance < TOKENS_PER_GENERATION ? "Buy tokens to generate a gallery" : "";
+    }
+}
+
+function ensureUserTokenBalance(user) {
+    if (!user) return;
+    let balance = getStoredTokenBalance(user.uid);
+    if (balance === null) {
+        balance = FREE_TOKENS_ON_SIGNUP;
+        setStoredTokenBalance(user.uid, balance);
+        saveTokensToFirestore(user.uid, balance);
+        showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
+    }
+    // Ensure cookie is synced
+    setTokenCookie(user.uid, balance);
+    updateTokenUI(balance);
+}
+
+function changeTokenBalance(amount) {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const current = getCurrentTokenBalance();
+    const next = Math.max(0, current + amount);
+    setStoredTokenBalance(user.uid, next);
+    saveTokensToFirestore(user.uid, next);
+    updateTokenUI(next);
+    return next;
+}
+
+function spendTokens(amount) {
+    const current = getCurrentTokenBalance();
+    if (current < amount) return false;
+    changeTokenBalance(-amount);
+    return true;
+}
+
+// =========================================================
+//  RAZORPAY PAYMENT INTEGRATION
+// =========================================================
+
+function initiateRazorpayPayment(tokenAmount, priceInPaise) {
+    const user = auth.currentUser;
+    if (!user) {
+        showNotification("Please sign in before buying tokens.");
+        return;
+    }
+
+    const options = {
+        key: RAZORPAY_KEY_ID,
+        amount: priceInPaise, // Amount in paise
+        currency: "INR",
+        name: "Gallery Generator",
+        description: `Buy ${tokenAmount} Token${tokenAmount !== 1 ? "s" : ""}`,
+        prefill: {
+            name: user.displayName || "User",
+            email: user.email,
+        },
+        handler: function (response) {
+            // ✅ Payment successful
+            console.log("✅ Payment successful:", response);
+            
+            // Update tokens immediately
+            const newBalance = changeTokenBalance(tokenAmount);
+            
+            // Save payment record to Firestore
+            savePaymentRecord(user.uid, {
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature,
+                tokens: tokenAmount,
+                amount: priceInPaise,
+                timestamp: new Date()
+            });
+            
+            showNotification(`✅ Payment successful! Added ${tokenAmount} token${tokenAmount !== 1 ? "s" : ""}. You now have ${newBalance} tokens.`);
+        },
+        modal: {
+            ondismiss: function () {
+                console.log("❌ Payment cancelled by user");
+                showNotification("Payment cancelled. Please try again.");
+            }
+        },
+        theme: {
+            color: "#4F46E5" // Purple to match your theme
+        }
+    };
+
+    // Create and open Razorpay checkout
+    const razorpay = new Razorpay(options);
+    razorpay.on('payment.failed', function (response) {
+        console.error("❌ Payment failed:", response.error);
+        showNotification(`Payment failed: ${response.error.description}`);
+    });
+    razorpay.open();
+}
+
+async function savePaymentRecord(uid, paymentData) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
+        console.log("⏳ Payment record queued for sync (offline)");
+        return;
+    }
+    
+    try {
+        await db.collection("users").doc(uid).collection("payments").add({
+            ...paymentData,
+            status: "completed"
+        });
+        console.log("✅ Payment record saved to Firestore");
+    } catch (error) {
+        console.error("❌ Error saving payment record:", error);
+        // Queue for retry
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
+    }
+}
+
+function buyTokens(amount) {
+    if (!auth.currentUser) {
+        showNotification("Please sign in before buying tokens.");
+        return;
+    }
+    const price = PURCHASE_PRICES[amount];
+    if (!price) {
+        showNotification("Invalid token amount.");
+        return;
+    }
+    
+    // Initiate Razorpay payment
+    initiateRazorpayPayment(amount, price);
+}
+
+// =========================================================
+//  AUTH STATE OBSERVER
+//  Fires automatically on every sign-in / sign-out event
+// =========================================================
+auth.onAuthStateChanged(async (user) => {
+    const authOverlay = document.getElementById("authOverlay");
+    const mainApp     = document.getElementById("mainApp");
+
+    if (user) {
+        // ── Signed in ──────────────────────────────────────
+        // Store user session in cookie
+        setUserSessionCookie(user);
+        
+        // Smooth fade-out the auth overlay
+        authOverlay.style.transition    = "opacity 0.35s ease";
+        authOverlay.style.opacity       = "0";
+        authOverlay.style.pointerEvents = "none";
+        setTimeout(() => { authOverlay.style.display = "none"; }, 360);
+
+        // Reveal main app
+        mainApp.style.display = "flex";
+
+        // Populate user bar
+        const displayName = user.displayName || user.email.split("@")[0];
+        document.getElementById("userDisplayName").textContent = displayName;
+        document.getElementById("userEmailDisplay").textContent = user.email;
+
+        const avatarImg    = document.getElementById("userAvatarImg");
+        const userInitials = document.getElementById("userInitials");
+
+        if (user.photoURL) {
+            avatarImg.src          = user.photoURL;
+            avatarImg.style.display = "block";
+            userInitials.style.display = "none";
+        } else {
+            avatarImg.style.display    = "none";
+            userInitials.style.display = "flex";
+            userInitials.textContent   = displayName[0].toUpperCase();
+        }
+
+        // Load tokens from Firestore first, then ensure balance
+        const firestoreTokens = await loadTokensFromFirestore(user.uid);
+        if (firestoreTokens !== null && firestoreTokens !== undefined) {
+            setStoredTokenBalance(user.uid, firestoreTokens);
+        }
+        ensureUserTokenBalance(user);
+        
+        // Process any offline sync queue
+        if (isOnline) {
+            await processOfflineSyncQueue(user.uid);
+        }
+
+    } else {
+        // ── Signed out ─────────────────────────────────────
         // Clear all cookies on logout
         clearAllCookies();
         
@@ -240,7 +561,8 @@ ${passwordScript}
         authOverlay.style.pointerEvents = "";
         mainApp.style.display           = "none";
         updateTokenUI(0);
-    
+    }
+});
 
 
 // =========================================================
@@ -666,7 +988,7 @@ function generateGallery() {
             }));
 
             const imageTags = imageData.map(img => `
-                <div class="gallery-item" onclick="toggleSelection(this)">
+                <div class="gallery-item" data-name="${img.name}" role="button" tabindex="0" onclick="toggleSelection(this)" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSelection(this); }">
                     <img src="${img.src}" alt="${img.name}">
                     <div class="overlay">
                         <span class="name">${img.name}</span>
@@ -851,7 +1173,7 @@ function generateGallery() {
 
         .gallery-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 16px;
             margin-bottom: 30px;
         }
@@ -892,6 +1214,13 @@ function generateGallery() {
             transition: opacity 0.3s ease;
         }
 
+        /* On touch devices there is no hover — keep overlay visible
+           so users can see names and selection affordance */
+        @media (hover: none) {
+            .gallery-item .overlay { opacity: 1; }
+            .gallery-item .checkmark { opacity: 0.85; }
+        }
+
         .gallery-item:hover .overlay {
             opacity: 1;
         }
@@ -903,7 +1232,7 @@ function generateGallery() {
 
         .gallery-item .name {
             color: white;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             text-align: center;
             margin-bottom: 8px;
