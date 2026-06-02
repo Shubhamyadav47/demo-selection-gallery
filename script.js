@@ -1,3 +1,4 @@
+
 // =========================================================
 //  FIREBASE CONFIGURATION
 //  ─────────────────────────────────────────────────────────
@@ -216,325 +217,669 @@ function setTokenCookie(uid, tokens) {
 /**
  * Retrieve token balance from cookie
  * @param {string} uid - User ID
- * @returns {number} - Token balance or 0
+ * @returns {number|null} - Token amount or null
  */
 function getTokenCookie(uid) {
-    if (!uid) return 0;
+    if (!uid) return null;
     const cookieName = `token_${uid}`;
     const value = getCookie(cookieName);
-    return value ? parseInt(value, 10) : 0;
+    return value !== null ? parseInt(value, 10) : null;
 }
 
-// =========================================================
-//  USER AUTHENTICATION
-// =========================================================
+/**
+ * Store authentication token in cookie
+ * @param {string} token - Auth token
+ */
+function setAuthTokenCookie(token) {
+    if (!token) return;
+    setCookie("authToken", token, 7); // Auth tokens expire in 7 days
+}
 
-let currentUser = null;
+/**
+ * Retrieve authentication token from cookie
+ * @returns {string|null} - Auth token or null
+ */
+function getAuthTokenCookie() {
+    return getCookie("authToken");
+}
 
-function updateUI() {
-    if (currentUser) {
-        // User is logged in
-        document.getElementById("authOverlay").style.display = "none";
-        document.getElementById("mainApp").style.display = "block";
-        updateUserBar();
-    } else {
-        // User is logged out
-        document.getElementById("authOverlay").style.display = "flex";
-        document.getElementById("mainApp").style.display = "none";
+/**
+ * Store user session in cookie
+ * @param {object} user - User object
+ */
+function setUserSessionCookie(user) {
+    if (!user) return;
+    const sessionData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || "",
+        photoURL: user.photoURL || "",
+        timestamp: Date.now()
+    };
+    setCookie("userSession", JSON.stringify(sessionData), 30);
+}
+
+/**
+ * Retrieve user session from cookie
+ * @returns {object|null} - User session object or null
+ */
+function getUserSessionCookie() {
+    const session = getCookie("userSession");
+    try {
+        return session ? JSON.parse(session) : null;
+    } catch (error) {
+        console.error("❌ Error parsing user session cookie:", error);
+        return null;
     }
 }
 
-function updateUserBar() {
-    if (!currentUser) return;
+/**
+ * Clear all app-related cookies
+ */
+function clearAllCookies() {
+    try {
+        const user = auth.currentUser;
+        if (user) {
+            deleteCookie(`token_${user.uid}`);
+        }
+        deleteCookie("authToken");
+        deleteCookie("userSession");
+        console.log("✅ All cookies cleared");
+    } catch (error) {
+        console.error("❌ Error clearing cookies:", error);
+    }
+}
 
-    document.getElementById("userDisplayName").textContent = currentUser.displayName || "User";
-    document.getElementById("userEmailDisplay").textContent = currentUser.email || "";
+// =========================================================
+//  TOKEN MANAGEMENT - Local Storage + Firestore + Cookies
+// =========================================================
 
-    // Avatar
-    if (currentUser.photoURL) {
-        document.getElementById("userAvatarImg").src = currentUser.photoURL;
-        document.getElementById("userAvatarImg").style.display = "block";
-        document.getElementById("userInitials").style.display = "none";
-    } else {
-        document.getElementById("userAvatarImg").style.display = "none";
-        document.getElementById("userInitials").style.display = "flex";
-        const initials = (currentUser.displayName || "U").split(" ").map(n => n[0]).join("").toUpperCase();
-        document.getElementById("userInitials").textContent = initials;
+function getTokenStorageKey(uid) {
+    return `galleryTokenBalance_${uid}`;
+}
+
+function getStoredTokenBalance(uid) {
+    const raw = localStorage.getItem(getTokenStorageKey(uid));
+    return raw === null ? null : parseInt(raw, 10) || 0;
+}
+
+function setStoredTokenBalance(uid, amount) {
+    localStorage.setItem(getTokenStorageKey(uid), String(amount));
+    // Also store in cookie for cross-tab synchronization
+    setTokenCookie(uid, amount);
+}
+
+async function saveTokensToFirestore(uid, tokens) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "saveTokens", tokens });
+        console.log("⏳ Tokens queued for sync (offline):", tokens);
+        return;
+    }
+    
+    try {
+        await db.collection("users").doc(uid).set({
+            tokens: tokens,
+            lastUpdated: new Date(),
+            displayName: auth.currentUser?.displayName || "",
+            email: auth.currentUser?.email || ""
+        }, { merge: true });
+        console.log("✅ Tokens saved to Firestore:", tokens);
+    } catch (error) {
+        console.error("❌ Error saving tokens to Firestore:", error);
+        // Queue for retry if online but Firestore fails
+        if (isOnline) {
+            queueOfflineSync(uid, { type: "saveTokens", tokens });
+        }
+    }
+}
+
+async function loadTokensFromFirestore(uid) {
+    if (!isOnline) {
+        console.log("⏳ Offline mode - using local tokens only");
+        return null; // Use localStorage as fallback
+    }
+    
+    try {
+        const doc = await db.collection("users").doc(uid).get();
+        if (doc.exists && doc.data().tokens) {
+            return doc.data().tokens;
+        }
+    } catch (error) {
+        console.error("❌ Error loading tokens from Firestore:", error);
+    }
+    return null;
+}
+
+function getCurrentTokenBalance() {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const stored = getStoredTokenBalance(user.uid);
+    return stored === null ? FREE_TOKENS_ON_SIGNUP : stored;
+}
+
+function updateTokenUI(balance) {
+    const tokenCount = document.getElementById("tokenCount");
+    const tokenCountInline = document.getElementById("tokenCountInline");
+    if (tokenCount) tokenCount.textContent = balance;
+    if (tokenCountInline) tokenCountInline.textContent = balance;
+    const generateBtn = document.getElementById("generateBtn");
+    if (generateBtn) {
+        generateBtn.disabled = balance < TOKENS_PER_GENERATION;
+        generateBtn.title = balance < TOKENS_PER_GENERATION ? "Buy tokens to generate a gallery" : "";
+    }
+}
+
+function ensureUserTokenBalance(user) {
+    if (!user) return;
+    let balance = getStoredTokenBalance(user.uid);
+    if (balance === null) {
+        balance = FREE_TOKENS_ON_SIGNUP;
+        setStoredTokenBalance(user.uid, balance);
+        saveTokensToFirestore(user.uid, balance);
+        showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
+    }
+    // Ensure cookie is synced
+    setTokenCookie(user.uid, balance);
+    updateTokenUI(balance);
+}
+
+function changeTokenBalance(amount) {
+    const user = auth.currentUser;
+    if (!user) return 0;
+    const current = getCurrentTokenBalance();
+    const next = Math.max(0, current + amount);
+    setStoredTokenBalance(user.uid, next);
+    saveTokensToFirestore(user.uid, next);
+    updateTokenUI(next);
+    return next;
+}
+
+function spendTokens(amount) {
+    const current = getCurrentTokenBalance();
+    if (current < amount) return false;
+    changeTokenBalance(-amount);
+    return true;
+}
+
+// =========================================================
+//  RAZORPAY PAYMENT INTEGRATION
+// =========================================================
+
+function initiateRazorpayPayment(tokenAmount, priceInPaise) {
+    const user = auth.currentUser;
+    if (!user) {
+        showNotification("Please sign in before buying tokens.");
+        return;
     }
 
-    // Update token display
-    loadTokenCount();
+    const options = {
+        key: RAZORPAY_KEY_ID,
+        amount: priceInPaise, // Amount in paise
+        currency: "INR",
+        name: "Gallery Generator",
+        description: `Buy ${tokenAmount} Token${tokenAmount !== 1 ? "s" : ""}`,
+        prefill: {
+            name: user.displayName || "User",
+            email: user.email,
+        },
+        handler: function (response) {
+            // ✅ Payment successful
+            console.log("✅ Payment successful:", response);
+            
+            // Update tokens immediately
+            const newBalance = changeTokenBalance(tokenAmount);
+            
+            // Save payment record to Firestore
+            savePaymentRecord(user.uid, {
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature,
+                tokens: tokenAmount,
+                amount: priceInPaise,
+                timestamp: new Date()
+            });
+            
+            showNotification(`✅ Payment successful! Added ${tokenAmount} token${tokenAmount !== 1 ? "s" : ""}. You now have ${newBalance} tokens.`);
+        },
+        modal: {
+            ondismiss: function () {
+                console.log("❌ Payment cancelled by user");
+                showNotification("Payment cancelled. Please try again.");
+            }
+        },
+        theme: {
+            color: "#4F46E5" // Purple to match your theme
+        }
+    };
+
+    // Create and open Razorpay checkout
+    const razorpay = new Razorpay(options);
+    razorpay.on('payment.failed', function (response) {
+        console.error("❌ Payment failed:", response.error);
+        showNotification(`Payment failed: ${response.error.description}`);
+    });
+    razorpay.open();
+}
+
+async function savePaymentRecord(uid, paymentData) {
+    if (!isOnline) {
+        // Queue for sync when back online
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
+        console.log("⏳ Payment record queued for sync (offline)");
+        return;
+    }
+    
+    try {
+        await db.collection("users").doc(uid).collection("payments").add({
+            ...paymentData,
+            status: "completed"
+        });
+        console.log("✅ Payment record saved to Firestore");
+    } catch (error) {
+        console.error("❌ Error saving payment record:", error);
+        // Queue for retry
+        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
+    }
+}
+
+function buyTokens(amount) {
+    if (!auth.currentUser) {
+        showNotification("Please sign in before buying tokens.");
+        return;
+    }
+    const price = PURCHASE_PRICES[amount];
+    if (!price) {
+        showNotification("Invalid token amount.");
+        return;
+    }
+    
+    // Initiate Razorpay payment
+    initiateRazorpayPayment(amount, price);
+}
+
+// =========================================================
+//  AUTH STATE OBSERVER
+//  Fires automatically on every sign-in / sign-out event
+// =========================================================
+auth.onAuthStateChanged(async (user) => {
+    const authOverlay = document.getElementById("authOverlay");
+    const mainApp     = document.getElementById("mainApp");
+
+    if (user) {
+        // ── Signed in ──────────────────────────────────────
+        // Store user session in cookie
+        setUserSessionCookie(user);
+        
+        // Smooth fade-out the auth overlay
+        authOverlay.style.transition    = "opacity 0.35s ease";
+        authOverlay.style.opacity       = "0";
+        authOverlay.style.pointerEvents = "none";
+        setTimeout(() => { authOverlay.style.display = "none"; }, 360);
+
+        // Reveal main app
+        mainApp.style.display = "flex";
+
+        // Populate user bar
+        const displayName = user.displayName || user.email.split("@")[0];
+        document.getElementById("userDisplayName").textContent = displayName;
+        document.getElementById("userEmailDisplay").textContent = user.email;
+
+        const avatarImg    = document.getElementById("userAvatarImg");
+        const userInitials = document.getElementById("userInitials");
+
+        if (user.photoURL) {
+            avatarImg.src          = user.photoURL;
+            avatarImg.style.display = "block";
+            userInitials.style.display = "none";
+        } else {
+            avatarImg.style.display    = "none";
+            userInitials.style.display = "flex";
+            userInitials.textContent   = displayName[0].toUpperCase();
+        }
+
+        // Load tokens from Firestore first, then ensure balance
+        const firestoreTokens = await loadTokensFromFirestore(user.uid);
+        if (firestoreTokens !== null && firestoreTokens !== undefined) {
+            setStoredTokenBalance(user.uid, firestoreTokens);
+        }
+        ensureUserTokenBalance(user);
+        
+        // Process any offline sync queue
+        if (isOnline) {
+            await processOfflineSyncQueue(user.uid);
+        }
+
+    } else {
+        // ── Signed out ─────────────────────────────────────
+        // Clear all cookies on logout
+        clearAllCookies();
+        
+        authOverlay.style.transition    = "";
+        authOverlay.style.display       = "flex";
+        authOverlay.style.opacity       = "1";
+        authOverlay.style.pointerEvents = "";
+        mainApp.style.display           = "none";
+        updateTokenUI(0);
+    }
+});
+
+
+// =========================================================
+//  AUTH TAB SWITCHER
+//  mode: "login" | "signup" | "forgot"
+// =========================================================
+let currentAuthMode = "login";
+
+function switchAuthTab(mode) {
+    currentAuthMode = mode;
+    clearAuthMessages();
+
+    const loginSignupForm = document.getElementById("authLoginSignupForm");
+    const forgotForm      = document.getElementById("forgotForm");
+    const authTabsEl      = document.getElementById("authTabs");
+    const submitBtn       = document.getElementById("authSubmitBtn");
+    const forgotLink      = document.getElementById("forgotPasswordLink");
+
+    if (mode === "forgot") {
+        loginSignupForm.style.display = "none";
+        forgotForm.style.display      = "block";
+        authTabsEl.style.display      = "none";
+    } else {
+        loginSignupForm.style.display = "block";
+        forgotForm.style.display      = "none";
+        authTabsEl.style.display      = "flex";
+        forgotLink.style.display      = mode === "login" ? "block" : "none";
+        submitBtn.textContent         = mode === "login" ? "Login" : "Sign Up";
+    }
+
+    // Update tab active state
+    const tabs = document.querySelectorAll(".auth-tab");
+    tabs.forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-mode") === mode);
+    });
+}
+
+// =========================================================
+//  AUTHENTICATION FUNCTIONS
+// =========================================================
+
+async function submitAuth() {
+    const email    = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value.trim();
+
+    if (!email || !password) {
+        showAuthError("Please enter email and password.");
+        return;
+    }
+
+    const submitBtn = document.getElementById("authSubmitBtn");
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+
+    try {
+        if (currentAuthMode === "login") {
+            await auth.signInWithEmailAndPassword(email, password);
+            showAuthSuccess("Login successful! 🎉");
+        } else {
+            await auth.createUserWithEmailAndPassword(email, password);
+            showAuthSuccess("Account created! Welcome! 🎉");
+        }
+    } catch (error) {
+        console.error("Auth error:", error);
+        let errorMsg = "Authentication failed.";
+        if (error.code === "auth/email-already-in-use") {
+            errorMsg = "Email already in use. Try logging in.";
+        } else if (error.code === "auth/weak-password") {
+            errorMsg = "Password should be at least 6 characters.";
+        } else if (error.code === "auth/invalid-email") {
+            errorMsg = "Invalid email address.";
+        } else if (error.code === "auth/user-not-found") {
+            errorMsg = "User not found. Try signing up.";
+        } else if (error.code === "auth/wrong-password") {
+            errorMsg = "Wrong password. Try again.";
+        }
+        showAuthError(errorMsg);
+    } finally {
+        submitBtn.disabled = false;
+    }
+}
+
+async function sendReset() {
+    const email = document.getElementById("resetEmail").value.trim();
+    if (!email) {
+        showAuthError("Please enter your email.");
+        return;
+    }
+
+    const resetBtn = document.getElementById("resetSubmitBtn");
+    resetBtn.disabled = true;
+
+    try {
+        await auth.sendPasswordResetEmail(email);
+        showAuthSuccess("Password reset email sent! Check your inbox.");
+        setTimeout(() => switchAuthTab("login"), 2000);
+    } catch (error) {
+        console.error("Reset error:", error);
+        showAuthError("Error sending reset email. Check your email address.");
+    } finally {
+        resetBtn.disabled = false;
+    }
 }
 
 async function signInWithGoogle() {
     const provider = new firebase.auth.GoogleAuthProvider();
+    const submitBtn = document.querySelector(".btn-google");
+    submitBtn.disabled = true;
+
     try {
-        const result = await auth.signInWithPopup(provider);
-        currentUser = result.user;
-
-        // Check if this is a new user
-        const userDoc = await db.collection("users").doc(currentUser.uid).get();
-        if (!userDoc.exists) {
-            // New user - give free tokens
-            await db.collection("users").doc(currentUser.uid).set({
-                displayName: currentUser.displayName,
-                email: currentUser.email,
-                photoURL: currentUser.photoURL,
-                tokens: FREE_TOKENS_ON_SIGNUP,
-                createdAt: new Date(),
-                lastUpdated: new Date()
-            });
-            setTokenCookie(currentUser.uid, FREE_TOKENS_ON_SIGNUP);
-            showNotification(`✅ Welcome! You received ${FREE_TOKENS_ON_SIGNUP} free tokens.`);
-        }
-
-        updateUI();
-        console.log("✅ Signed in with Google:", currentUser.email);
+        await auth.signInWithPopup(provider);
+        showAuthSuccess("Google sign-in successful! 🎉");
     } catch (error) {
-        console.error("❌ Google Sign-In Error:", error);
-        document.getElementById("authError").textContent = "Error: " + error.message;
+        console.error("Google sign-in error:", error);
+        showAuthError("Google sign-in failed. Please try again.");
+    } finally {
+        submitBtn.disabled = false;
     }
 }
 
 function logout() {
-    auth.signOut().then(() => {
-        currentUser = null;
-        updateUI();
-        showNotification("You have been logged out.");
-        console.log("✅ User logged out");
-    }).catch(error => {
-        console.error("❌ Logout Error:", error);
+    clearAllCookies();
+    auth.signOut().catch(error => {
+        console.error("Logout error:", error);
+        showNotification("Error logging out.");
     });
 }
 
 // =========================================================
-//  TOKEN MANAGEMENT
+//  AUTH UI HELPERS
 // =========================================================
 
-async function loadTokenCount() {
-    if (!currentUser) return;
-
-    try {
-        const userDoc = await db.collection("users").doc(currentUser.uid).get();
-        if (userDoc.exists) {
-            const tokens = userDoc.data().tokens || 0;
-            updateTokenDisplay(tokens);
-            setTokenCookie(currentUser.uid, tokens);
-        }
-    } catch (error) {
-        console.error("❌ Error loading tokens:", error);
-    }
+function clearAuthMessages() {
+    document.getElementById("authError").textContent   = "";
+    document.getElementById("authSuccess").textContent = "";
 }
 
-function updateTokenDisplay(count) {
-    document.getElementById("tokenCount").textContent = count;
-    document.getElementById("tokenCountInline").textContent = count;
-    
-    const btn = document.getElementById("generateBtn");
-    if (count <= 0) {
-        btn.disabled = true;
-        btn.style.opacity = "0.6";
-        btn.title = "You need at least 1 token to generate a gallery";
-    } else {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        btn.title = "";
-    }
+function showAuthError(msg) {
+    const errorEl = document.getElementById("authError");
+    errorEl.textContent = msg;
+    errorEl.style.display = msg ? "block" : "none";
 }
 
-function spendTokens(amount) {
-    if (!currentUser) return;
-
-    const cookieName = `token_${currentUser.uid}`;
-    let currentTokens = getTokenCookie(currentUser.uid);
-    currentTokens = Math.max(0, currentTokens - amount);
-
-    // Update locally
-    setTokenCookie(currentUser.uid, currentTokens);
-    updateTokenDisplay(currentTokens);
-
-    // Sync with Firestore
-    db.collection("users").doc(currentUser.uid).set(
-        { tokens: currentTokens, lastUpdated: new Date() },
-        { merge: true }
-    ).then(() => {
-        console.log(`✅ Tokens spent: ${amount} (Remaining: ${currentTokens})`);
-    }).catch(error => {
-        console.error("❌ Error updating tokens:", error);
-        queueOfflineSync(currentUser.uid, {
-            type: "saveTokens",
-            tokens: currentTokens
-        });
-    });
+function showAuthSuccess(msg) {
+    const successEl = document.getElementById("authSuccess");
+    successEl.textContent = msg;
+    successEl.style.display = msg ? "block" : "none";
 }
 
-function buyTokens(amount) {
-    if (!currentUser) {
-        showNotification("Please sign in first.");
-        return;
-    }
-
-    const priceInPaise = PURCHASE_PRICES[amount];
-    if (!priceInPaise) {
-        showNotification("Invalid purchase amount");
-        return;
-    }
-
-    // Razorpay payment flow
-    const options = {
-        key: RAZORPAY_KEY_ID,
-        amount: priceInPaise,
-        currency: "INR",
-        name: "Gallery Generator",
-        description: `Purchase ${amount} tokens`,
-        handler: function(response) {
-            // Payment successful
-            addTokens(amount, response.razorpay_payment_id);
-        },
-        prefill: {
-            email: currentUser.email,
-            name: currentUser.displayName
-        },
-        theme: {
-            color: "#4F46E5"
-        }
-    };
-
-    const rzp = new Razorpay(options);
-    rzp.on('payment.failed', function(response) {
-        showNotification("Payment failed: " + response.error.description);
-        console.error("❌ Payment failed:", response.error);
-    });
-
-    rzp.open();
-}
-
-async function addTokens(amount, paymentId) {
-    if (!currentUser) return;
-
-    try {
-        // Get current token count
-        const userDoc = await db.collection("users").doc(currentUser.uid).get();
-        const currentTokens = userDoc.data()?.tokens || 0;
-        const newTokenCount = currentTokens + amount;
-
-        // Update Firestore
-        await db.collection("users").doc(currentUser.uid).set(
-            {
-                tokens: newTokenCount,
-                lastUpdated: new Date()
-            },
-            { merge: true }
-        );
-
-        // Log payment
-        await db.collection("users").doc(currentUser.uid).collection("payments").add({
-            amount: amount,
-            paymentId: paymentId,
-            timestamp: new Date(),
-            type: "token_purchase"
-        });
-
-        // Update local storage and UI
-        setTokenCookie(currentUser.uid, newTokenCount);
-        updateTokenDisplay(newTokenCount);
-
-        const displayPrice = DISPLAY_PRICES[amount];
-        showNotification(`✅ Payment successful! ${amount} tokens added. (₹${displayPrice})`);
-        console.log(`✅ Added ${amount} tokens. Total: ${newTokenCount}`);
-
-    } catch (error) {
-        console.error("❌ Error adding tokens:", error);
-        showNotification("Error processing payment. Please contact support.");
-        
-        // Queue for offline sync
-        queueOfflineSync(currentUser.uid, {
-            type: "savePayment",
-            paymentData: { paymentId, amount, timestamp: Date.now() }
-        });
-    }
+function toggleAuthPw() {
+    const field = document.getElementById("authPassword");
+    field.type = field.type === "password" ? "text" : "password";
 }
 
 // =========================================================
-//  IMAGE UPLOAD MANAGEMENT
+//  IMAGE UPLOAD & PREVIEW
 // =========================================================
 
-let imageData = [];
+let uploadedImages = [];
+let uploadZoneInitialized = false; // Flag to prevent duplicate initialization
+let isProcessingFiles = false; // Flag to prevent concurrent file processing
+let isGalleryGenerated = false; // Flag to prevent duplicate gallery generation
+let lastGeneratedImageCount = 0; // Track the last generated image count
 
 function setupUploadZone() {
+    // Prevent duplicate event listener initialization
+    if (uploadZoneInitialized) {
+        console.log("✅ Upload zone already initialized, skipping duplicate setup");
+        return;
+    }
+    
     const uploadZone = document.getElementById("uploadZone");
     const fileInput = document.getElementById("imageFileInput");
 
-    uploadZone.addEventListener("click", () => fileInput.click());
-
-    // Drag and drop
-    uploadZone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        uploadZone.classList.add("drag-over");
-    });
-
-    uploadZone.addEventListener("dragleave", () => {
-        uploadZone.classList.remove("drag-over");
-    });
-
-    uploadZone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove("drag-over");
-        const files = e.dataTransfer.files;
-        handleFiles(files);
-    });
-
-    fileInput.addEventListener("change", () => {
-        handleFiles(fileInput.files);
-    });
-}
-
-function handleFiles(files) {
-    const validFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
-    if (validFiles.length === 0) {
-        showNotification("No valid image files selected.");
+    if (!uploadZone || !fileInput) {
+        console.error("❌ Upload zone or file input not found");
         return;
     }
 
-    readImages(validFiles);
+    // Handler for upload zone click
+    const handleUploadClick = (e) => {
+        if (isProcessingFiles) {
+            console.log("⏳ Files already being processed, ignoring click");
+            return;
+        }
+        e.stopPropagation();
+        e.preventDefault();
+        console.log("📁 Opening file picker...");
+        fileInput.click();
+    };
+
+    // Handler for drag over
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.add("drag-over");
+    };
+
+    // Handler for drag leave
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.remove("drag-over");
+    };
+
+    // Handler for drop
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZone.classList.remove("drag-over");
+        if (!isProcessingFiles) {
+            console.log("📤 Files dropped, processing...");
+            handleFileSelect(e.dataTransfer.files);
+        }
+    };
+
+    // Handler for file input change
+    const handleFileInputChange = (e) => {
+        if (!isProcessingFiles) {
+            console.log("📤 Files selected via dialog, processing...");
+            handleFileSelect(e.target.files);
+        }
+    };
+
+    // Attach event listeners
+    uploadZone.addEventListener("click", handleUploadClick);
+    uploadZone.addEventListener("dragover", handleDragOver);
+    uploadZone.addEventListener("dragleave", handleDragLeave);
+    uploadZone.addEventListener("drop", handleDrop);
+    fileInput.addEventListener("change", handleFileInputChange);
+
+    uploadZoneInitialized = true;
+    console.log("✅ Upload zone initialized successfully");
 }
 
-function readImages(files) {
+function handleFileSelect(files) {
+    if (!files || files.length === 0) {
+        uploadedImages = [];
+        document.getElementById("previewThumbs").innerHTML = "";
+        document.getElementById("previewGrid").style.display = "none";
+        document.getElementById("progressWrap").style.display = "none";
+        isProcessingFiles = false;
+        return;
+    }
+
+    // Set processing flag to prevent duplicate triggers
+    isProcessingFiles = true;
+
+    uploadedImages = []; // Clear previous uploads
+    const previewThumbs = document.getElementById("previewThumbs");
+    const previewGrid = document.getElementById("previewGrid");
     const progressWrap = document.getElementById("progressWrap");
-    const progressLabel = document.getElementById("progressLabel");
-    const progressFill = document.getElementById("progressFill");
 
+    previewThumbs.innerHTML = "";
+    previewGrid.style.display = "block";
     progressWrap.style.display = "block";
-    imageData = [];
 
-    let completed = 0;
+    const totalFiles = files.length;
+    let processedFiles = 0;
+    const filesArray = Array.from(files);
 
-    files.forEach((file, index) => {
+    filesArray.forEach((file, index) => {
+        // Validate file is actually an image
+        if (!file.type.startsWith("image/")) {
+            console.warn(`⚠️ Skipping non-image file: ${file.name}`);
+            return;
+        }
+
         const reader = new FileReader();
 
         reader.onload = (e) => {
-            imageData.push({
-                name: file.name,
-                dataUrl: e.target.result
-            });
+            try {
+                uploadedImages[index] = {
+                    name: file.name,
+                    data: e.target.result
+                };
 
-            completed++;
-            const percent = (completed / files.length) * 100;
-            progressFill.style.width = percent + "%";
-            progressLabel.textContent = `Reading images… ${completed} / ${files.length}`;
+                // Create preview thumbnail
+                const thumb = document.createElement("div");
+                thumb.className = "preview-thumb";
+                thumb.innerHTML = `
+                    <img src="${e.target.result}" alt="${file.name}">
+                    <div class="thumb-name">${file.name}</div>
+                `;
+                previewThumbs.appendChild(thumb);
 
-            if (completed === files.length) {
-                progressWrap.style.display = "none";
-                updatePreview();
+                processedFiles++;
+                updateProgressBar(processedFiles, totalFiles, progressWrap);
+
+                if (processedFiles === totalFiles) {
+                    setTimeout(() => {
+                        progressWrap.style.display = "none";
+                        updatePreviewCount();
+                        // Reset file input for re-upload capability
+                        const fileInput = document.getElementById("imageFileInput");
+                        if (fileInput) fileInput.value = "";
+                        // Clear processing flag after all files are processed
+                        isProcessingFiles = false;
+                        console.log("✅ File processing complete");
+                    }, 300);
+                }
+            } catch (error) {
+                console.error(`❌ Error processing file ${file.name}:`, error);
+                processedFiles++;
+                updateProgressBar(processedFiles, totalFiles, progressWrap);
+                if (processedFiles === totalFiles) {
+                    isProcessingFiles = false;
+                }
             }
         };
 
         reader.onerror = () => {
-            console.error(`Error reading file: ${file.name}`);
-            completed++;
-            if (completed === files.length) {
-                progressWrap.style.display = "none";
-                updatePreview();
+            console.error(`❌ Failed to read file: ${file.name}`);
+            processedFiles++;
+            updateProgressBar(processedFiles, totalFiles, progressWrap);
+            if (processedFiles === totalFiles) {
+                isProcessingFiles = false;
             }
         };
 
@@ -542,34 +887,823 @@ function readImages(files) {
     });
 }
 
-function updatePreview() {
-    const previewGrid = document.getElementById("previewGrid");
-    const previewCount = document.getElementById("previewCount");
-    const previewThumbs = document.getElementById("previewThumbs");
+function updateProgressBar(current, total, progressWrap) {
+    const percent = Math.round((current / total) * 100);
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    
+    if (progressFill) progressFill.style.width = percent + "%";
+    if (progressLabel) progressLabel.textContent = `Reading images… ${current} / ${total}`;
+}
 
-    if (imageData.length === 0) {
-        previewGrid.style.display = "none";
-        return;
+function formatFileSize(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+function estimateFileSizeInBytes() {
+    // Estimate base HTML template size (includes all the styling and scripts)
+    let estimatedSize = 45000; // Approximate size of base HTML template
+    
+    // Add size of all Base64 images
+    uploadedImages.forEach(img => {
+        if (img.data) {
+            // Base64 string length is roughly the size in bytes when decoded
+            estimatedSize += img.data.length;
+        }
+    });
+    
+    return estimatedSize;
+}
+
+function updatePreviewCount() {
+    const count = uploadedImages.length;
+    let countText = count + (count === 1 ? " image selected" : " images selected");
+    
+    // Add estimated file size
+    if (count > 0) {
+        const estimatedSize = estimateFileSizeInBytes();
+        const formattedSize = formatFileSize(estimatedSize);
+        countText += ` • Estimated: ${formattedSize}`;
+        
+        // Reset generation flag if image count changed
+        if (count !== lastGeneratedImageCount && isGalleryGenerated) {
+            isGalleryGenerated = false;
+            console.log("♻️ Image count changed, generation flag reset");
+        }
     }
-
-    previewGrid.style.display = "block";
-    previewCount.textContent = `${imageData.length} images selected`;
-
-    previewThumbs.innerHTML = imageData
-        .map((img, idx) => `
-            <div class="preview-thumb">
-                <img src="${img.dataUrl}" alt="Preview ${idx + 1}">
-                <div class="thumb-name">${img.name}</div>
-            </div>
-        `)
-        .join("");
+    
+    document.getElementById("previewCount").textContent = countText;
 }
 
 function clearImages() {
-    imageData = [];
-    document.getElementById("imageFileInput").value = "";
+    uploadedImages = [];
+    isProcessingFiles = false;
+    isGalleryGenerated = false;
+    lastGeneratedImageCount = 0;
+    const fileInput = document.getElementById("imageFileInput");
+    if (fileInput) {
+        fileInput.value = "";
+    }
+    document.getElementById("previewThumbs").innerHTML = "";
     document.getElementById("previewGrid").style.display = "none";
-    showNotification("All images cleared.");
+    document.getElementById("progressWrap").style.display = "none";
+    console.log("✅ Images cleared and ready for new upload");
+}
+
+// =========================================================
+//  GALLERY GENERATION
+// =========================================================
+
+let generatedHTML = null;
+
+function generateGallery() {
+    if (uploadedImages.length === 0) {
+        showNotification("Please upload at least one image.");
+        return;
+    }
+
+    // Prevent duplicate generation with same images
+    if (isGalleryGenerated && uploadedImages.length === lastGeneratedImageCount) {
+        showNotification("⚠️ Gallery already generated with these images. Clear and upload new images to generate again.");
+        return;
+    }
+
+    const title = document.getElementById("galleryTitle").value || "My Gallery";
+    const password = document.getElementById("galleryPassword").value;
+    const whatsappNumber = document.getElementById("whatsappNumber").value;
+
+    const btn = document.getElementById("generateBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg> Generating...`;
+
+    setTimeout(() => {
+        try {
+            const imageData = uploadedImages.map(img => ({
+                name: img.name.replace(/\.[^/.]+$/, "").toUpperCase(),
+                src: img.data
+            }));
+
+            const imageTags = imageData.map((img, idx) => `
+                <div class="gallery-item" data-name="${img.name}" data-image-src="${img.src}" role="button" tabindex="0" onclick="event.stopPropagation(); if(!event.target.closest('.zoom-btn')) toggleSelection(this);" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSelection(this); }">
+                    <img src="${img.src}" alt="${img.name}">
+                    <button class="zoom-btn" onclick="event.stopPropagation(); openZoomModal('${img.src}', '${img.name}');" title="Zoom photo">🔍</button>
+                    <div class="overlay">
+                        <span class="name">${img.name}</span>
+                        <svg class="checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+                        </svg>
+                    </div>
+                </div>
+            `).join("");
+
+            const loginHTML = password ? `
+                <div id="passwordOverlay" class="password-overlay">
+                    <div class="password-card">
+                        <h3>Gallery Protected</h3>
+                        <p>This gallery is password protected. Enter password to view:</p>
+                        <input type="password" id="passwordInput" placeholder="Enter password" />
+                        <button onclick="verifyPassword('${password}')">Unlock</button>
+                        <div id="passwordError" class="password-error"></div>
+                    </div>
+                </div>
+            ` : "";
+
+            const passwordScript = password ? `
+                <script>
+                    function verifyPassword(correctPassword) {
+                        const input = document.getElementById('passwordInput').value;
+                        const errorDiv = document.getElementById('passwordError');
+                        if (input === correctPassword) {
+                            document.getElementById('passwordOverlay').style.display = 'none';
+                            document.getElementById('galleryContent').style.display = 'block';
+                        } else {
+                            errorDiv.textContent = '❌ Incorrect password';
+                        }
+                    }
+                    document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') verifyPassword('${password}');
+                    });
+                </script>
+            ` : "";
+
+            generatedHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --success: #10B981;
+            --success-hover: #059669;
+            --background: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-body: #6B7280;
+            --border-color: #E5E7EB;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--background);
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .password-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .password-card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+        }
+
+        .password-card h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: var(--text-main);
+        }
+
+        .password-card p {
+            color: var(--text-body);
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .password-card input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 15px;
+            text-align: center;
+            background-color: #F9FAFB;
+        }
+
+        .password-card input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background-color: #FFF;
+        }
+
+        .password-card button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .password-card button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .password-error {
+            color: #EF4444;
+            font-size: 13px;
+            margin-top: 12px;
+            font-weight: 600;
+        }
+
+        #galleryContent {
+            display: ${password ? "none" : "block"};
+        }
+
+        .gallery-header {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 20px 0;
+        }
+
+        .gallery-header h1 {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+
+        .gallery-header p {
+            color: var(--text-body);
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .gallery-container {
+            width: 100%;
+            background: var(--card-bg);
+            border-radius: 0;
+            padding: 30px 20px;
+            box-shadow: none;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .gallery-item {
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+            background: #f0f0f0;
+            min-height: 220px;
+        }
+
+        .gallery-item:hover {
+            border-color: var(--primary);
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            background: #f5f5f5;
+        }
+
+        .gallery-item .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        /* On touch devices there is no hover — keep overlay visible
+           so users can see names and selection affordance */
+        @media (hover: none) {
+            .gallery-item .overlay { opacity: 1; }
+            .gallery-item .checkmark { opacity: 0.85; }
+        }
+
+        .gallery-item:hover .overlay {
+            opacity: 1;
+        }
+
+        .gallery-item.selected .overlay {
+            opacity: 1;
+            background: rgba(79, 70, 229, 0.6);
+        }
+
+        .gallery-item .name {
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .gallery-item .checkmark {
+            width: 32px;
+            height: 32px;
+            stroke: white;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .gallery-item.selected .checkmark {
+            opacity: 1;
+        }
+
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 20px;
+            background: #F9FAFB;
+            border-radius: 0;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 0 auto;
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        .info-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .counter {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: var(--text-body);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: white;
+            border: 1.5px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-copy { color: var(--primary); }
+        .btn-send-wa { color: #25D366; }
+
+        .btn-copy:hover { border-color: var(--primary); }
+        .btn-send-wa:hover { border-color: #25D366; }
+
+        .toast-notify {
+            position: fixed;
+            bottom: 95px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background-color: #1F2937;
+            color: #FFFFFF;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+            transition: transform 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        .toast-notify.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        #galleryContent { display: ${password ? "none" : "block"}; }
+
+        @media(max-width: 640px) {
+            .action-bar { flex-direction: column; gap: 12px; padding: 12px; margin: 0 20px; }
+            .action-buttons { width: 100%; }
+            .action-btn { flex: 1; justify-content: center; }
+            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+            .gallery-header { padding: 30px 20px 20px; }
+        }
+
+        .zoom-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(79, 70, 229, 0.9);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(6px);
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .zoom-btn:hover {
+            transform: scale(1.15);
+            background: rgba(79, 70, 229, 1);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+        }
+
+        .zoom-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .zoom-overlay.show {
+            display: flex;
+        }
+
+        .zoom-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        .zoom-overlay img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100001;
+        }
+
+        .zoom-control-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .zoom-control-btn:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.1);
+        }
+
+        .close-zoom {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 100001;
+        }
+
+        .close-zoom:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.1);
+        }
+
+        .zoom-level {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 100001;
+        }
+    </style>
+</head>
+<body>
+
+${loginHTML}
+
+<div id="galleryContent">
+    <header class="gallery-header">
+        <h1>${title}</h1>
+        <p>Select your favorite photos by clicking/tapping them. Once completed, share or copy the final list from the bottom action panel.</p>
+    </header>
+
+    <div class="gallery-container">
+        <div class="gallery-grid">
+            ${imageTags}
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <div class="info-wrap">
+            <span class="counter" id="count">0 Photos Selected</span>
+            <p class="help-text">Click images to select/deselect</p>
+        </div>
+        <div class="action-buttons">
+            <button class="action-btn btn-copy" onclick="copyListToClipboard()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                Copy Selection
+            </button>
+            ${whatsappNumber ? `
+            <button class="action-btn btn-send-wa" onclick="sendToWhatsApp()">
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.717-1.458L0 24zm6.052-4.144c1.6.95 3.177 1.45 4.809 1.451 5.485 0 9.947-4.46 9.951-9.948.002-2.66-1.019-5.162-2.87-7.017C16.141 2.488 13.64 1.47 11.002 1.47c-5.489 0-9.952 4.461-9.955 9.95-.001 1.724.47 3.413 1.365 4.907L1.442 20.89l4.667-1.034zM18.22 15c-.29-.146-1.713-.846-1.977-.942-.265-.096-.458-.145-.65.146-.193.29-.747.942-.916 1.135-.169.193-.338.217-.628.072-2.902-1.45-4.004-2.522-5.495-5.078-.393-.675.393-.627 1.125-2.088.13-.25.065-.47-.033-.664-.096-.193-.747-1.802-1.024-2.47-.27-.648-.544-.56-.747-.57l-.634-.012c-.217 0-.57.081-.868.41-.298.328-1.135 1.109-1.135 2.701 0 1.593 1.157 3.131 1.317 3.348.16.217 2.278 3.48 5.517 4.881 2.695 1.166 3.242.934 3.822.879.578-.055 1.714-.7 1.955-1.378.24-.678.24-1.259.169-1.378-.071-.12-.264-.193-.554-.339z"/></svg>
+                Send via WhatsApp
+            </button>` : ""}
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast-notify">Selection Copied!</div>
+
+<script>
+    let selectedPhotos = new Set();
+    const myWhatsAppNumber = "${whatsappNumber}";
+
+    function toggleSelection(element) {
+        const photoName = element.getAttribute('data-name') || element.querySelector('.name').textContent;
+        if (selectedPhotos.has(photoName)) {
+            selectedPhotos.delete(photoName);
+            element.classList.remove('selected');
+        } else {
+            selectedPhotos.add(photoName);
+            element.classList.add('selected');
+        }
+        document.getElementById('count').innerText = selectedPhotos.size + " Photos Selected";
+    }
+
+    function showToast(text) {
+        const toast = document.getElementById("toast");
+        toast.innerText = text;
+        toast.classList.add("show");
+        setTimeout(() => { toast.classList.remove("show"); }, 2500);
+    }
+
+    function getFormattedText() {
+        if (selectedPhotos.size === 0) return "";
+        return Array.from(selectedPhotos)
+            .map(name => name.replace(/\\s*\\([^)]*\\)(?=\\.[^.]+$)/i, '').replace(/\\.[^/.]+$/, ".JPG"))
+            .join(" OR ");
+    }
+
+    function copyListToClipboard() {
+        if (selectedPhotos.size === 0) { showToast("Please select at least one photo first!"); return; }
+        const textToCopy = getFormattedText();
+        const tempTextarea = document.createElement("textarea");
+        tempTextarea.value = textToCopy;
+        document.body.appendChild(tempTextarea);
+        tempTextarea.select();
+        try { document.execCommand('copy'); showToast("Selection list copied to clipboard!"); }
+        catch (err) { showToast("Failed to copy list."); }
+        document.body.removeChild(tempTextarea);
+    }
+
+    function sendToWhatsApp() {
+        if (selectedPhotos.size === 0) { showToast("Please select at least one photo first!"); return; }
+        const message = encodeURIComponent(getFormattedText());
+        window.open("https://wa.me/" + myWhatsAppNumber + "?text=" + message, '_blank');
+    }
+
+    let currentZoomLevel = 1;
+    const MIN_ZOOM = 0.5;
+    const MAX_ZOOM = 4;
+    const ZOOM_STEP = 0.2;
+
+    function openZoomModal(src, name) {
+        currentZoomLevel = 1;
+        const overlay = document.getElementById("zoomOverlay");
+        const img = document.getElementById("zoomedImage");
+        img.src = src;
+        img.style.transform = 'scale(1)';
+        overlay.classList.add("show");
+        document.body.style.overflow = "hidden";
+        updateZoomLevel();
+    }
+
+    function closeZoomModal() {
+        const overlay = document.getElementById("zoomOverlay");
+        overlay.classList.remove("show");
+        document.body.style.overflow = "auto";
+        currentZoomLevel = 1;
+    }
+
+    function zoomIn() {
+        if (currentZoomLevel < MAX_ZOOM) {
+            currentZoomLevel += ZOOM_STEP;
+            updateZoomDisplay();
+        }
+    }
+
+    function zoomOut() {
+        if (currentZoomLevel > MIN_ZOOM) {
+            currentZoomLevel -= ZOOM_STEP;
+            updateZoomDisplay();
+        }
+    }
+
+    function resetZoom() {
+        currentZoomLevel = 1;
+        updateZoomDisplay();
+    }
+
+    function updateZoomDisplay() {
+        const img = document.getElementById("zoomedImage");
+        if (img) {
+            img.style.transform = 'scale(' + currentZoomLevel.toFixed(2) + ')';
+        }
+        updateZoomLevel();
+    }
+
+    function updateZoomLevel() {
+        const levelEl = document.getElementById("zoomLevel");
+        if (levelEl) {
+            levelEl.textContent = Math.round(currentZoomLevel * 100) + '%';
+        }
+    }
+
+    // Keyboard shortcuts for zoom
+    document.addEventListener('keydown', function(e) {
+        const overlay = document.getElementById("zoomOverlay");
+        if (!overlay || !overlay.classList.contains("show")) return;
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn(); }
+        else if (e.key === '-') { e.preventDefault(); zoomOut(); }
+        else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeZoomModal(); }
+    });
+
+    // Mouse wheel zoom
+    document.addEventListener('wheel', function(e) {
+        const overlay = document.getElementById("zoomOverlay");
+        if (!overlay || !overlay.classList.contains("show")) return;
+        e.preventDefault();
+        if (e.deltaY < 0) { zoomIn(); }
+        else { zoomOut(); }
+    }, { passive: false });
+<\/script>
+
+${passwordScript}
+
+<div class="zoom-overlay" id="zoomOverlay" onclick="if(event.target === event.currentTarget) closeZoomModal();">
+    <button class="close-zoom" onclick="closeZoomModal()" title="Close (ESC)">✕</button>
+    <div class="zoom-controls">
+        <button class="zoom-control-btn" onclick="zoomOut()" title="Zoom Out (- key or scroll)">−</button>
+        <button class="zoom-control-btn" onclick="resetZoom()" title="Reset Zoom (0 key)">⟲</button>
+        <button class="zoom-control-btn" onclick="zoomIn()" title="Zoom In (+ key or scroll)">+</button>
+    </div>
+    <div class="zoom-container">
+        <img id="zoomedImage" src="" alt="Zoomed image">
+    </div>
+    <div class="zoom-level" id="zoomLevel">100%</div>
+</div>
+
+</body>
+</html>`;
+
+            spendTokens(TOKENS_PER_GENERATION);
+            const downloadBtn = document.getElementById("downloadBtn");
+            downloadBtn.classList.add("active");
+            
+            // Mark gallery as generated and track image count
+            isGalleryGenerated = true;
+            lastGeneratedImageCount = imageData.length;
+            
+            // Calculate actual file size
+            const actualFileSize = new Blob([generatedHTML], { type: "text/html" }).size;
+            const formattedSize = formatFileSize(actualFileSize);
+            
+            showNotification(`✅ Gallery Generated! (${imageData.length} images • ${formattedSize}) — 1 token used.`);
+
+        } catch (err) {
+            showNotification("Error building gallery: " + err.message);
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg> Generate HTML Code`;
+        }
+    }, 50);
+}
+
+// =========================
+// DOWNLOAD
+// =========================
+function downloadFile() {
+    if (!generatedHTML) {
+        showNotification("Please generate your gallery first.");
+        return;
+    }
+    const blob = new Blob([generatedHTML], { type: "text/html" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "interactive-selection-gallery.html";
+    link.click();
+    showNotification("Your gallery was successfully saved.");
 }
 
 // =========================================================
@@ -584,22 +1718,6 @@ function showNotification(msg) {
         toast.classList.remove("show");
     }, 3000);
 }
-
-// =========================================================
-//  AUTH STATE LISTENER
-// =========================================================
-
-auth.onAuthStateChanged((user) => {
-    if (user) {
-        currentUser = user;
-        updateUI();
-        console.log("✅ User authenticated:", user.email);
-    } else {
-        currentUser = null;
-        updateUI();
-        console.log("User not authenticated");
-    }
-});
 
 // Initialize on page load
 document.addEventListener("DOMContentLoaded", () => {
