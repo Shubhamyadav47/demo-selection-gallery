@@ -627,10 +627,6 @@ function toggleAuthPw() {
 }
 
 // =========================================================
-//  IMAGE UPLOAD & PREVIEW
-// =========================================================
-
-// =========================================================
 //  IMAGE UPLOAD, PROCESSING & PREVIEW
 // =========================================================
 
@@ -877,7 +873,6 @@ function clearImages() {
     document.getElementById("previewGrid").style.display = "none";
     document.getElementById("progressWrap").style.display = "none";
 }
-
 // =========================================================
 //  GALLERY GENERATION
 // =========================================================
