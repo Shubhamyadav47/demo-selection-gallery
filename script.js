@@ -54,244 +54,7 @@ const DISPLAY_PRICES = {
 };
 
 // =========================================================
-//  OFFLINE SUPPORT SYSTEM
-// =========================================================
-
-let isOnline = navigator.onLine;
-let offlineSyncQueue = [];
-
-function getOfflineSyncKey(uid) {
-    return `offlineSync_${uid}`;
-}
-
-function queueOfflineSync(uid, action) {
-    const queue = JSON.parse(localStorage.getItem(getOfflineSyncKey(uid)) || "[]");
-    queue.push({ ...action, timestamp: Date.now() });
-    localStorage.setItem(getOfflineSyncKey(uid), JSON.stringify(queue));
-}
-
-async function processOfflineSyncQueue(uid) {
-    const syncKey = getOfflineSyncKey(uid);
-    const queue = JSON.parse(localStorage.getItem(syncKey) || "[]");
-    
-    if (queue.length === 0) return;
-    
-    console.log(`🔄 Processing ${queue.length} offline sync tasks...`);
-    
-    for (const action of queue) {
-        try {
-            if (action.type === "saveTokens") {
-                await db.collection("users").doc(uid).set({
-                    tokens: action.tokens,
-                    lastUpdated: new Date(),
-                    displayName: auth.currentUser?.displayName || "",
-                    email: auth.currentUser?.email || ""
-                }, { merge: true });
-                console.log(`✅ Synced tokens: ${action.tokens}`);
-            } else if (action.type === "savePayment") {
-                await db.collection("users").doc(uid).collection("payments").add(action.paymentData);
-                console.log(`✅ Synced payment record`);
-            }
-        } catch (error) {
-            console.error(`❌ Failed to sync action:`, error);
-            break; // Stop if one fails, will retry later
-        }
-    }
-    
-    // Clear successfully synced items
-    localStorage.removeItem(syncKey);
-    showNotification("✅ Offline changes synced successfully!");
-}
-
-// Setup online/offline event listeners
-window.addEventListener("online", async () => {
-    isOnline = true;
-    updateConnectionStatus();
-    console.log("🟢 Internet connection restored");
-    
-    const user = auth.currentUser;
-    if (user) {
-        await processOfflineSyncQueue(user.uid);
-    }
-});
-
-window.addEventListener("offline", () => {
-    isOnline = false;
-    updateConnectionStatus();
-    console.log("🔴 Internet connection lost");
-    
-    // Automatically logout when internet is disconnected
-    auth.signOut().then(() => {
-        showNotification("⚠️ Internet disconnected. You have been logged out for security. Please reconnect and sign in again.");
-        console.log("✅ User logged out due to internet disconnection");
-    }).catch(error => {
-        console.error("❌ Error during logout:", error);
-        showNotification("Internet connection lost. Please refresh the page.");
-    });
-});
-
-function updateConnectionStatus() {
-    const statusEl = document.getElementById("connectionStatus");
-    if (statusEl) {
-        if (isOnline) {
-            statusEl.className = "connection-status online";
-            statusEl.innerHTML = '<span class="status-dot"></span>Online';
-        } else {
-            statusEl.className = "connection-status offline";
-            statusEl.innerHTML = '<span class="status-dot"></span>Offline Mode';
-        }
-    }
-}
-
-// =========================================================
-//  COOKIE MANAGEMENT UTILITIES
-// =========================================================
-
-/**
- * Set a cookie with optional expiration
- * @param {string} name - Cookie name
- * @param {string} value - Cookie value
- * @param {number} days - Days until expiration (default: 30 days)
- * @param {boolean} secure - Use secure flag (default: true)
- */
-function setCookie(name, value, days = 30, secure = true) {
-    try {
-        const date = new Date();
-        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-        const expires = "expires=" + date.toUTCString();
-        const secureFrag = secure && location.protocol === "https:" ? "; Secure" : "";
-        const sameSite = "; SameSite=Strict";
-        document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}${secureFrag}${sameSite}; path=/`;
-        console.log(`✅ Cookie set: ${name}`);
-    } catch (error) {
-        console.error(`❌ Error setting cookie ${name}:`, error);
-    }
-}
-
-/**
- * Get a cookie value by name
- * @param {string} name - Cookie name
- * @returns {string|null} - Cookie value or null if not found
- */
-function getCookie(name) {
-    try {
-        const nameEQ = encodeURIComponent(name) + "=";
-        const cookies = document.cookie.split(";");
-        for (let cookie of cookies) {
-            cookie = cookie.trim();
-            if (cookie.indexOf(nameEQ) === 0) {
-                return decodeURIComponent(cookie.substring(nameEQ.length));
-            }
-        }
-        return null;
-    } catch (error) {
-        console.error(`❌ Error getting cookie ${name}:`, error);
-        return null;
-    }
-}
-
-/**
- * Delete a cookie
- * @param {string} name - Cookie name
- */
-function deleteCookie(name) {
-    try {
-        setCookie(name, "", -1);
-        console.log(`✅ Cookie deleted: ${name}`);
-    } catch (error) {
-        console.error(`❌ Error deleting cookie ${name}:`, error);
-    }
-}
-
-/**
- * Store token balance in cookie
- * @param {string} uid - User ID
- * @param {number} tokens - Token amount
- */
-function setTokenCookie(uid, tokens) {
-    if (!uid) return;
-    const cookieName = `token_${uid}`;
-    setCookie(cookieName, String(tokens), 30);
-}
-
-/**
- * Retrieve token balance from cookie
- * @param {string} uid - User ID
- * @returns {number|null} - Token amount or null
- */
-function getTokenCookie(uid) {
-    if (!uid) return null;
-    const cookieName = `token_${uid}`;
-    const value = getCookie(cookieName);
-    return value !== null ? parseInt(value, 10) : null;
-}
-
-/**
- * Store authentication token in cookie
- * @param {string} token - Auth token
- */
-function setAuthTokenCookie(token) {
-    if (!token) return;
-    setCookie("authToken", token, 7); // Auth tokens expire in 7 days
-}
-
-/**
- * Retrieve authentication token from cookie
- * @returns {string|null} - Auth token or null
- */
-function getAuthTokenCookie() {
-    return getCookie("authToken");
-}
-
-/**
- * Store user session in cookie
- * @param {object} user - User object
- */
-function setUserSessionCookie(user) {
-    if (!user) return;
-    const sessionData = {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || "",
-        photoURL: user.photoURL || "",
-        timestamp: Date.now()
-    };
-    setCookie("userSession", JSON.stringify(sessionData), 30);
-}
-
-/**
- * Retrieve user session from cookie
- * @returns {object|null} - User session object or null
- */
-function getUserSessionCookie() {
-    const session = getCookie("userSession");
-    try {
-        return session ? JSON.parse(session) : null;
-    } catch (error) {
-        console.error("❌ Error parsing user session cookie:", error);
-        return null;
-    }
-}
-
-/**
- * Clear all app-related cookies
- */
-function clearAllCookies() {
-    try {
-        const user = auth.currentUser;
-        if (user) {
-            deleteCookie(`token_${user.uid}`);
-        }
-        deleteCookie("authToken");
-        deleteCookie("userSession");
-        console.log("✅ All cookies cleared");
-    } catch (error) {
-        console.error("❌ Error clearing cookies:", error);
-    }
-}
-
-// =========================================================
-//  TOKEN MANAGEMENT - Local Storage + Firestore + Cookies
+//  TOKEN MANAGEMENT - Local Storage + Firestore
 // =========================================================
 
 function getTokenStorageKey(uid) {
@@ -305,18 +68,9 @@ function getStoredTokenBalance(uid) {
 
 function setStoredTokenBalance(uid, amount) {
     localStorage.setItem(getTokenStorageKey(uid), String(amount));
-    // Also store in cookie for cross-tab synchronization
-    setTokenCookie(uid, amount);
 }
 
 async function saveTokensToFirestore(uid, tokens) {
-    if (!isOnline) {
-        // Queue for sync when back online
-        queueOfflineSync(uid, { type: "saveTokens", tokens });
-        console.log("⏳ Tokens queued for sync (offline):", tokens);
-        return;
-    }
-    
     try {
         await db.collection("users").doc(uid).set({
             tokens: tokens,
@@ -327,19 +81,10 @@ async function saveTokensToFirestore(uid, tokens) {
         console.log("✅ Tokens saved to Firestore:", tokens);
     } catch (error) {
         console.error("❌ Error saving tokens to Firestore:", error);
-        // Queue for retry if online but Firestore fails
-        if (isOnline) {
-            queueOfflineSync(uid, { type: "saveTokens", tokens });
-        }
     }
 }
 
 async function loadTokensFromFirestore(uid) {
-    if (!isOnline) {
-        console.log("⏳ Offline mode - using local tokens only");
-        return null; // Use localStorage as fallback
-    }
-    
     try {
         const doc = await db.collection("users").doc(uid).get();
         if (doc.exists && doc.data().tokens) {
@@ -379,8 +124,6 @@ function ensureUserTokenBalance(user) {
         saveTokensToFirestore(user.uid, balance);
         showNotification(`Welcome! ${balance} free tokens have been added to your account.`);
     }
-    // Ensure cookie is synced
-    setTokenCookie(user.uid, balance);
     updateTokenUI(balance);
 }
 
@@ -463,13 +206,6 @@ function initiateRazorpayPayment(tokenAmount, priceInPaise) {
 }
 
 async function savePaymentRecord(uid, paymentData) {
-    if (!isOnline) {
-        // Queue for sync when back online
-        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
-        console.log("⏳ Payment record queued for sync (offline)");
-        return;
-    }
-    
     try {
         await db.collection("users").doc(uid).collection("payments").add({
             ...paymentData,
@@ -478,8 +214,6 @@ async function savePaymentRecord(uid, paymentData) {
         console.log("✅ Payment record saved to Firestore");
     } catch (error) {
         console.error("❌ Error saving payment record:", error);
-        // Queue for retry
-        queueOfflineSync(uid, { type: "savePayment", paymentData: { ...paymentData, status: "completed" } });
     }
 }
 
@@ -508,9 +242,6 @@ auth.onAuthStateChanged(async (user) => {
 
     if (user) {
         // ── Signed in ──────────────────────────────────────
-        // Store user session in cookie
-        setUserSessionCookie(user);
-        
         // Smooth fade-out the auth overlay
         authOverlay.style.transition    = "opacity 0.35s ease";
         authOverlay.style.opacity       = "0";
@@ -544,17 +275,9 @@ auth.onAuthStateChanged(async (user) => {
             setStoredTokenBalance(user.uid, firestoreTokens);
         }
         ensureUserTokenBalance(user);
-        
-        // Process any offline sync queue
-        if (isOnline) {
-            await processOfflineSyncQueue(user.uid);
-        }
 
     } else {
         // ── Signed out ─────────────────────────────────────
-        // Clear all cookies on logout
-        clearAllCookies();
-        
         authOverlay.style.transition    = "";
         authOverlay.style.display       = "flex";
         authOverlay.style.opacity       = "1";
@@ -684,7 +407,6 @@ async function signInWithGoogle() {
 }
 
 function logout() {
-    clearAllCookies();
     auth.signOut().catch(error => {
         console.error("Logout error:", error);
         showNotification("Error logging out.");
@@ -722,164 +444,82 @@ function toggleAuthPw() {
 // =========================================================
 
 let uploadedImages = [];
-let uploadZoneInitialized = false; // Flag to prevent duplicate initialization
-let isProcessingFiles = false; // Flag to prevent concurrent file processing
-let isGalleryGenerated = false; // Flag to prevent duplicate gallery generation
-let lastGeneratedImageCount = 0; // Track the last generated image count
 
 function setupUploadZone() {
-    // Prevent duplicate event listener initialization
-    if (uploadZoneInitialized) {
-        console.log("✅ Upload zone already initialized, skipping duplicate setup");
-        return;
-    }
-    
     const uploadZone = document.getElementById("uploadZone");
     const fileInput = document.getElementById("imageFileInput");
 
-    if (!uploadZone || !fileInput) {
-        console.error("❌ Upload zone or file input not found");
-        return;
-    }
+    uploadZone.addEventListener("click", () => fileInput.click());
 
-    // Handler for upload zone click
-    const handleUploadClick = (e) => {
-        if (isProcessingFiles) {
-            console.log("⏳ Files already being processed, ignoring click");
-            return;
-        }
-        e.stopPropagation();
+    uploadZone.addEventListener("dragover", (e) => {
         e.preventDefault();
-        console.log("📁 Opening file picker...");
-        fileInput.click();
-    };
-
-    // Handler for drag over
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
         uploadZone.classList.add("drag-over");
-    };
+    });
 
-    // Handler for drag leave
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+    uploadZone.addEventListener("dragleave", () => {
         uploadZone.classList.remove("drag-over");
-    };
+    });
 
-    // Handler for drop
-    const handleDrop = (e) => {
+    uploadZone.addEventListener("drop", (e) => {
         e.preventDefault();
-        e.stopPropagation();
         uploadZone.classList.remove("drag-over");
-        if (!isProcessingFiles) {
-            console.log("📤 Files dropped, processing...");
-            handleFileSelect(e.dataTransfer.files);
-        }
-    };
+        handleFileSelect(e.dataTransfer.files);
+    });
 
-    // Handler for file input change
-    const handleFileInputChange = (e) => {
-        if (!isProcessingFiles) {
-            console.log("📤 Files selected via dialog, processing...");
-            handleFileSelect(e.target.files);
-        }
-    };
-
-    // Attach event listeners
-    uploadZone.addEventListener("click", handleUploadClick);
-    uploadZone.addEventListener("dragover", handleDragOver);
-    uploadZone.addEventListener("dragleave", handleDragLeave);
-    uploadZone.addEventListener("drop", handleDrop);
-    fileInput.addEventListener("change", handleFileInputChange);
-
-    uploadZoneInitialized = true;
-    console.log("✅ Upload zone initialized successfully");
+    fileInput.addEventListener("change", (e) => {
+        handleFileSelect(e.target.files);
+    });
 }
 
 function handleFileSelect(files) {
-    if (!files || files.length === 0) {
-        uploadedImages = [];
-        document.getElementById("previewThumbs").innerHTML = "";
-        document.getElementById("previewGrid").style.display = "none";
-        document.getElementById("progressWrap").style.display = "none";
-        isProcessingFiles = false;
-        return;
-    }
-
-    // Set processing flag to prevent duplicate triggers
-    isProcessingFiles = true;
-
-    uploadedImages = []; // Clear previous uploads
+    uploadedImages = [];
     const previewThumbs = document.getElementById("previewThumbs");
     const previewGrid = document.getElementById("previewGrid");
     const progressWrap = document.getElementById("progressWrap");
 
     previewThumbs.innerHTML = "";
+
+    if (files.length === 0) {
+        previewGrid.style.display = "none";
+        progressWrap.style.display = "none";
+        return;
+    }
+
     previewGrid.style.display = "block";
     progressWrap.style.display = "block";
 
     const totalFiles = files.length;
     let processedFiles = 0;
-    const filesArray = Array.from(files);
 
-    filesArray.forEach((file, index) => {
-        // Validate file is actually an image
-        if (!file.type.startsWith("image/")) {
-            console.warn(`⚠️ Skipping non-image file: ${file.name}`);
-            return;
-        }
-
+    Array.from(files).forEach((file, index) => {
         const reader = new FileReader();
 
         reader.onload = (e) => {
-            try {
-                uploadedImages[index] = {
-                    name: file.name,
-                    data: e.target.result
-                };
+            uploadedImages[index] = {
+                name: file.name,
+                data: e.target.result
+            };
 
-                // Create preview thumbnail
-                const thumb = document.createElement("div");
-                thumb.className = "preview-thumb";
-                thumb.innerHTML = `
-                    <img src="${e.target.result}" alt="${file.name}">
-                    <div class="thumb-name">${file.name}</div>
-                `;
-                previewThumbs.appendChild(thumb);
+            // Create preview thumbnail
+            const thumb = document.createElement("div");
+            thumb.className = "preview-thumb";
+            thumb.innerHTML = `
+                <img src="${e.target.result}" alt="${file.name}">
+                <div class="thumb-name">${file.name}</div>
+            `;
+            previewThumbs.appendChild(thumb);
 
-                processedFiles++;
-                updateProgressBar(processedFiles, totalFiles, progressWrap);
-
-                if (processedFiles === totalFiles) {
-                    setTimeout(() => {
-                        progressWrap.style.display = "none";
-                        updatePreviewCount();
-                        // Reset file input for re-upload capability
-                        const fileInput = document.getElementById("imageFileInput");
-                        if (fileInput) fileInput.value = "";
-                        // Clear processing flag after all files are processed
-                        isProcessingFiles = false;
-                        console.log("✅ File processing complete");
-                    }, 300);
-                }
-            } catch (error) {
-                console.error(`❌ Error processing file ${file.name}:`, error);
-                processedFiles++;
-                updateProgressBar(processedFiles, totalFiles, progressWrap);
-                if (processedFiles === totalFiles) {
-                    isProcessingFiles = false;
-                }
-            }
-        };
-
-        reader.onerror = () => {
-            console.error(`❌ Failed to read file: ${file.name}`);
             processedFiles++;
-            updateProgressBar(processedFiles, totalFiles, progressWrap);
+            const percent = Math.round((processedFiles / totalFiles) * 100);
+            const progressFill = document.getElementById("progressFill");
+            progressFill.style.width = percent + "%";
+            document.getElementById("progressLabel").textContent = `Reading images… ${processedFiles} / ${totalFiles}`;
+
             if (processedFiles === totalFiles) {
-                isProcessingFiles = false;
+                setTimeout(() => {
+                    progressWrap.style.display = "none";
+                    updatePreviewCount();
+                }, 300);
             }
         };
 
@@ -887,71 +527,18 @@ function handleFileSelect(files) {
     });
 }
 
-function updateProgressBar(current, total, progressWrap) {
-    const percent = Math.round((current / total) * 100);
-    const progressFill = document.getElementById("progressFill");
-    const progressLabel = document.getElementById("progressLabel");
-    
-    if (progressFill) progressFill.style.width = percent + "%";
-    if (progressLabel) progressLabel.textContent = `Reading images… ${current} / ${total}`;
-}
-
-function formatFileSize(bytes) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-}
-
-function estimateFileSizeInBytes() {
-    // Estimate base HTML template size (includes all the styling and scripts)
-    let estimatedSize = 45000; // Approximate size of base HTML template
-    
-    // Add size of all Base64 images
-    uploadedImages.forEach(img => {
-        if (img.data) {
-            // Base64 string length is roughly the size in bytes when decoded
-            estimatedSize += img.data.length;
-        }
-    });
-    
-    return estimatedSize;
-}
-
 function updatePreviewCount() {
     const count = uploadedImages.length;
-    let countText = count + (count === 1 ? " image selected" : " images selected");
-    
-    // Add estimated file size
-    if (count > 0) {
-        const estimatedSize = estimateFileSizeInBytes();
-        const formattedSize = formatFileSize(estimatedSize);
-        countText += ` • Estimated: ${formattedSize}`;
-        
-        // Reset generation flag if image count changed
-        if (count !== lastGeneratedImageCount && isGalleryGenerated) {
-            isGalleryGenerated = false;
-            console.log("♻️ Image count changed, generation flag reset");
-        }
-    }
-    
-    document.getElementById("previewCount").textContent = countText;
+    document.getElementById("previewCount").textContent = 
+        count + (count === 1 ? " image selected" : " images selected");
 }
 
 function clearImages() {
     uploadedImages = [];
-    isProcessingFiles = false;
-    isGalleryGenerated = false;
-    lastGeneratedImageCount = 0;
-    const fileInput = document.getElementById("imageFileInput");
-    if (fileInput) {
-        fileInput.value = "";
-    }
+    document.getElementById("imageFileInput").value = "";
     document.getElementById("previewThumbs").innerHTML = "";
     document.getElementById("previewGrid").style.display = "none";
     document.getElementById("progressWrap").style.display = "none";
-    console.log("✅ Images cleared and ready for new upload");
 }
 
 // =========================================================
@@ -963,12 +550,6 @@ let generatedHTML = null;
 function generateGallery() {
     if (uploadedImages.length === 0) {
         showNotification("Please upload at least one image.");
-        return;
-    }
-
-    // Prevent duplicate generation with same images
-    if (isGalleryGenerated && uploadedImages.length === lastGeneratedImageCount) {
-        showNotification("⚠️ Gallery already generated with these images. Clear and upload new images to generate again.");
         return;
     }
 
@@ -987,10 +568,9 @@ function generateGallery() {
                 src: img.data
             }));
 
-            const imageTags = imageData.map((img, idx) => `
-                <div class="gallery-item" data-name="${img.name}" data-image-src="${img.src}" role="button" tabindex="0" onclick="event.stopPropagation(); if(!event.target.closest('.zoom-btn')) toggleSelection(this);" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSelection(this); }">
+            const imageTags = imageData.map(img => `
+                <div class="gallery-item" onclick="toggleSelection(this)">
                     <img src="${img.src}" alt="${img.name}">
-                    <button class="zoom-btn" onclick="event.stopPropagation(); openZoomModal('${img.src}', '${img.name}');" title="Zoom photo">🔍</button>
                     <div class="overlay">
                         <span class="name">${img.name}</span>
                         <svg class="checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1058,7 +638,7 @@ function generateGallery() {
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: var(--background);
-            padding: 0;
+            padding: 20px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -1143,10 +723,10 @@ function generateGallery() {
         }
 
         .gallery-header {
+            max-width: 900px;
             width: 100%;
             text-align: center;
             margin-bottom: 40px;
-            padding: 40px 20px 0;
         }
 
         .gallery-header h1 {
@@ -1163,35 +743,31 @@ function generateGallery() {
         }
 
         .gallery-container {
+            max-width: 900px;
             width: 100%;
             background: var(--card-bg);
-            border-radius: 0;
-            padding: 30px 20px;
-            box-shadow: none;
-            border: none;
-            border-top: 1px solid var(--border-color);
-            border-bottom: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
         }
 
         .gallery-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
             gap: 16px;
             margin-bottom: 30px;
-            max-width: 1400px;
-            margin-left: auto;
-            margin-right: auto;
         }
 
         .gallery-item {
             position: relative;
             overflow: hidden;
             border-radius: 12px;
+            aspect-ratio: 1;
             cursor: pointer;
             border: 2px solid var(--border-color);
             transition: all 0.3s ease;
             background: #f0f0f0;
-            min-height: 220px;
         }
 
         .gallery-item:hover {
@@ -1203,9 +779,8 @@ function generateGallery() {
         .gallery-item img {
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             display: block;
-            background: #f5f5f5;
         }
 
         .gallery-item .overlay {
@@ -1220,13 +795,6 @@ function generateGallery() {
             transition: opacity 0.3s ease;
         }
 
-        /* On touch devices there is no hover — keep overlay visible
-           so users can see names and selection affordance */
-        @media (hover: none) {
-            .gallery-item .overlay { opacity: 1; }
-            .gallery-item .checkmark { opacity: 0.85; }
-        }
-
         .gallery-item:hover .overlay {
             opacity: 1;
         }
@@ -1238,7 +806,7 @@ function generateGallery() {
 
         .gallery-item .name {
             color: white;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             text-align: center;
             margin-bottom: 8px;
@@ -1264,12 +832,8 @@ function generateGallery() {
             gap: 16px;
             padding: 20px;
             background: #F9FAFB;
-            border-radius: 0;
-            border: none;
-            border-top: 1px solid var(--border-color);
-            margin: 0 auto;
-            max-width: 1400px;
-            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
         }
 
         .info-wrap {
@@ -1346,143 +910,53 @@ function generateGallery() {
         #galleryContent { display: ${password ? "none" : "block"}; }
 
         @media(max-width: 640px) {
-            .action-bar { flex-direction: column; gap: 12px; padding: 12px; margin: 0 20px; }
+            .action-bar { flex-direction: column; gap: 12px; padding: 12px; }
             .action-buttons { width: 100%; }
             .action-btn { flex: 1; justify-content: center; }
-            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-            .gallery-header { padding: 30px 20px 20px; }
+            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
         }
 
         .zoom-btn {
             position: absolute;
             top: 12px;
-            right: 12px;
-            width: 40px;
-            height: 40px;
+            left: 12px;
+            width: 38px;
+            height: 38px;
             border: none;
             border-radius: 50%;
-            background: rgba(79, 70, 229, 0.9);
+            background: rgba(0,0,0,0.75);
             color: white;
-            font-size: 20px;
+            font-size: 18px;
             cursor: pointer;
-            z-index: 30;
+            z-index: 20;
             display: flex;
             align-items: center;
             justify-content: center;
             backdrop-filter: blur(6px);
             transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
         .zoom-btn:hover {
-            transform: scale(1.15);
-            background: rgba(79, 70, 229, 1);
-            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+            transform: scale(1.1);
+            background: rgba(0,0,0,0.9);
         }
 
         .zoom-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.95);
+            background: rgba(0,0,0,0.94);
             display: none;
             justify-content: center;
             align-items: center;
             z-index: 99999;
             padding: 20px;
-            overflow: hidden;
-        }
-
-        .zoom-overlay.show {
-            display: flex;
-        }
-
-        .zoom-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: auto;
         }
 
         .zoom-overlay img {
-            max-width: 100%;
-            max-height: 100%;
+            max-width: 96%;
+            max-height: 96%;
             object-fit: contain;
-            border-radius: 8px;
-            transition: transform 0.2s ease;
-        }
-
-        .zoom-controls {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
-            z-index: 100001;
-        }
-
-        .zoom-control-btn {
-            width: 44px;
-            height: 44px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-
-        .zoom-control-btn:hover {
-            background: rgba(255,255,255,0.25);
-            transform: scale(1.1);
-        }
-
-        .close-zoom {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 44px;
-            height: 44px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.2);
-            z-index: 100001;
-        }
-
-        .close-zoom:hover {
-            background: rgba(255,255,255,0.25);
-            transform: scale(1.1);
-        }
-
-        .zoom-level {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.6);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            z-index: 100001;
+            border-radius: 12px;
         }
     </style>
 </head>
@@ -1571,96 +1045,22 @@ ${loginHTML}
         window.open("https://wa.me/" + myWhatsAppNumber + "?text=" + message, '_blank');
     }
 
-    let currentZoomLevel = 1;
-    const MIN_ZOOM = 0.5;
-    const MAX_ZOOM = 4;
-    const ZOOM_STEP = 0.2;
-
-    function openZoomModal(src, name) {
-        currentZoomLevel = 1;
-        const overlay = document.getElementById("zoomOverlay");
-        const img = document.getElementById("zoomedImage");
-        img.src = src;
-        img.style.transform = 'scale(1)';
-        overlay.classList.add("show");
+    function openZoom(src) {
+        document.getElementById("zoomedImage").src = src;
+        document.getElementById("zoomOverlay").style.display = "flex";
         document.body.style.overflow = "hidden";
-        updateZoomLevel();
     }
 
-    function closeZoomModal() {
-        const overlay = document.getElementById("zoomOverlay");
-        overlay.classList.remove("show");
+    function closeZoom() {
+        document.getElementById("zoomOverlay").style.display = "none";
         document.body.style.overflow = "auto";
-        currentZoomLevel = 1;
     }
-
-    function zoomIn() {
-        if (currentZoomLevel < MAX_ZOOM) {
-            currentZoomLevel += ZOOM_STEP;
-            updateZoomDisplay();
-        }
-    }
-
-    function zoomOut() {
-        if (currentZoomLevel > MIN_ZOOM) {
-            currentZoomLevel -= ZOOM_STEP;
-            updateZoomDisplay();
-        }
-    }
-
-    function resetZoom() {
-        currentZoomLevel = 1;
-        updateZoomDisplay();
-    }
-
-    function updateZoomDisplay() {
-        const img = document.getElementById("zoomedImage");
-        if (img) {
-            img.style.transform = 'scale(' + currentZoomLevel.toFixed(2) + ')';
-        }
-        updateZoomLevel();
-    }
-
-    function updateZoomLevel() {
-        const levelEl = document.getElementById("zoomLevel");
-        if (levelEl) {
-            levelEl.textContent = Math.round(currentZoomLevel * 100) + '%';
-        }
-    }
-
-    // Keyboard shortcuts for zoom
-    document.addEventListener('keydown', function(e) {
-        const overlay = document.getElementById("zoomOverlay");
-        if (!overlay || !overlay.classList.contains("show")) return;
-        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn(); }
-        else if (e.key === '-') { e.preventDefault(); zoomOut(); }
-        else if (e.key === '0') { e.preventDefault(); resetZoom(); }
-        else if (e.key === 'Escape') { e.preventDefault(); closeZoomModal(); }
-    });
-
-    // Mouse wheel zoom
-    document.addEventListener('wheel', function(e) {
-        const overlay = document.getElementById("zoomOverlay");
-        if (!overlay || !overlay.classList.contains("show")) return;
-        e.preventDefault();
-        if (e.deltaY < 0) { zoomIn(); }
-        else { zoomOut(); }
-    }, { passive: false });
 <\/script>
 
 ${passwordScript}
 
-<div class="zoom-overlay" id="zoomOverlay" onclick="if(event.target === event.currentTarget) closeZoomModal();">
-    <button class="close-zoom" onclick="closeZoomModal()" title="Close (ESC)">✕</button>
-    <div class="zoom-controls">
-        <button class="zoom-control-btn" onclick="zoomOut()" title="Zoom Out (- key or scroll)">−</button>
-        <button class="zoom-control-btn" onclick="resetZoom()" title="Reset Zoom (0 key)">⟲</button>
-        <button class="zoom-control-btn" onclick="zoomIn()" title="Zoom In (+ key or scroll)">+</button>
-    </div>
-    <div class="zoom-container">
-        <img id="zoomedImage" src="" alt="Zoomed image">
-    </div>
-    <div class="zoom-level" id="zoomLevel">100%</div>
+<div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
+    <img id="zoomedImage" src="">
 </div>
 
 </body>
@@ -1669,16 +1069,7 @@ ${passwordScript}
             spendTokens(TOKENS_PER_GENERATION);
             const downloadBtn = document.getElementById("downloadBtn");
             downloadBtn.classList.add("active");
-            
-            // Mark gallery as generated and track image count
-            isGalleryGenerated = true;
-            lastGeneratedImageCount = imageData.length;
-            
-            // Calculate actual file size
-            const actualFileSize = new Blob([generatedHTML], { type: "text/html" }).size;
-            const formattedSize = formatFileSize(actualFileSize);
-            
-            showNotification(`✅ Gallery Generated! (${imageData.length} images • ${formattedSize}) — 1 token used.`);
+            showNotification("Interactive Gallery Compiled! (" + imageData.length + " images embedded) — 1 token used.");
 
         } catch (err) {
             showNotification("Error building gallery: " + err.message);
@@ -1722,9 +1113,7 @@ function showNotification(msg) {
 // Initialize on page load
 document.addEventListener("DOMContentLoaded", () => {
     setupUploadZone();
-    updateConnectionStatus();
     console.log("✅ Gallery App initialized");
     console.log("🔑 Firebase configured:", firebase.app() ? "✅" : "❌");
     console.log("💳 Razorpay Key ID:", RAZORPAY_KEY_ID ? "✅" : "❌");
-    console.log("📡 Connection Status:", isOnline ? "🟢 Online" : "🔴 Offline");
 });
