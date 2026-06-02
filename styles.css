@@ -844,3 +844,23 @@ button {
     .container    { padding: 24px 20px; }
     .btn-logout span { display: none; }
 }
+/* =========================
+   IMAGE PROCESSING OPTIONS
+   ========================= */
+.processing-options {
+    background: #F8FAFC;
+    border: 1px solid #E5E7EB;
+    padding: 18px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.processing-options .form-group {
+    margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+    .processing-options .form-row {
+        gap: 16px;
+    }
+}

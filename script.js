@@ -630,83 +630,143 @@ function toggleAuthPw() {
 //  IMAGE UPLOAD & PREVIEW
 // =========================================================
 
+// =========================================================
+//  IMAGE UPLOAD, PROCESSING & PREVIEW
+// =========================================================
+
 let uploadedImages = [];
 let uploadZoneInitialized = false; 
 let isProcessingFiles = false; 
 let isGalleryGenerated = false; 
 let lastGeneratedImageCount = 0; 
 
-function setupUploadZone() {
-    if (uploadZoneInitialized) {
-        console.log("✅ Upload zone already initialized, skipping duplicate setup");
-        return;
+function setupProcessingOptions() {
+    const wmCheck = document.getElementById('enableWatermark');
+    const wmGroup = document.getElementById('watermarkGroup');
+    if (wmCheck && wmGroup) {
+        wmCheck.addEventListener('change', (e) => {
+            wmGroup.style.display = e.target.checked ? 'block' : 'none';
+        });
     }
+
+    const compCheck = document.getElementById('compressImages');
+    const compGroup = document.getElementById('compressGroup');
+    if (compCheck && compGroup) {
+        compCheck.addEventListener('change', (e) => {
+            compGroup.style.display = e.target.checked ? 'block' : 'none';
+        });
+    }
+
+    const qualitySlider = document.getElementById('compressQuality');
+    const qualityVal = document.getElementById('qualityVal');
+    if (qualitySlider && qualityVal) {
+        qualitySlider.addEventListener('input', (e) => {
+            qualityVal.textContent = Math.round(e.target.value * 100) + '%';
+        });
+    }
+}
+
+function setupUploadZone() {
+    if (uploadZoneInitialized) return;
     
     const uploadZone = document.getElementById("uploadZone");
     const fileInput = document.getElementById("imageFileInput");
 
-    if (!uploadZone || !fileInput) {
-        console.error("❌ Upload zone or file input not found");
-        return;
-    }
+    if (!uploadZone || !fileInput) return;
 
-    const handleUploadClick = (e) => {
-        if (isProcessingFiles) {
-            console.log("⏳ Files already being processed, ignoring click");
-            return;
-        }
-        e.stopPropagation();
-        e.preventDefault();
-        console.log("📁 Opening file picker...");
+    uploadZone.addEventListener("click", (e) => {
+        if (isProcessingFiles) return;
+        e.stopPropagation(); e.preventDefault();
         fileInput.click();
-    };
+    });
 
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadZone.classList.add("drag-over");
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadZone.classList.remove("drag-over");
-    };
-
-    const handleDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadZone.classList.remove("drag-over");
-        if (!isProcessingFiles) {
-            console.log("📤 Files dropped, processing...");
-            handleFileSelect(e.dataTransfer.files);
-        }
-    };
-
-    const handleFileInputChange = (e) => {
-        if (!isProcessingFiles) {
-            console.log("📤 Files selected via dialog, processing...");
-            handleFileSelect(e.target.files);
-        }
-    };
-
-    uploadZone.addEventListener("click", handleUploadClick);
-    uploadZone.addEventListener("dragover", handleDragOver);
-    uploadZone.addEventListener("dragleave", handleDragLeave);
-    uploadZone.addEventListener("drop", handleDrop);
-    fileInput.addEventListener("change", handleFileInputChange);
+    uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); uploadZone.classList.add("drag-over"); });
+    uploadZone.addEventListener("dragleave", (e) => { e.preventDefault(); uploadZone.classList.remove("drag-over"); });
+    uploadZone.addEventListener("drop", (e) => {
+        e.preventDefault(); uploadZone.classList.remove("drag-over");
+        if (!isProcessingFiles) handleFileSelect(e.dataTransfer.files);
+    });
+    
+    fileInput.addEventListener("change", (e) => {
+        if (!isProcessingFiles) handleFileSelect(e.target.files);
+    });
 
     uploadZoneInitialized = true;
-    console.log("✅ Upload zone initialized successfully");
 }
 
-function handleFileSelect(files) {
+// Promise wrapper to process an image with Canvas (Compress + Watermark)
+function processImage(file) {
+    return new Promise((resolve, reject) => {
+        const compress = document.getElementById('compressImages').checked;
+        const quality = parseFloat(document.getElementById('compressQuality').value);
+        const watermark = document.getElementById('enableWatermark').checked;
+        const watermarkText = document.getElementById('watermarkText').value.trim();
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (!compress && (!watermark || !watermarkText)) {
+                resolve(e.target.result); // Return original if no processing needed
+                return;
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                let width = img.width;
+                let height = img.height;
+
+                if (compress) {
+                    const MAX_DIMENSION = 1600; // Optimal max dimension for standard screens
+                    if (width > height && width > MAX_DIMENSION) {
+                        height = Math.round((height * MAX_DIMENSION) / width);
+                        width = MAX_DIMENSION;
+                    } else if (height > width && height > MAX_DIMENSION) {
+                        width = Math.round((width * MAX_DIMENSION) / height);
+                        height = MAX_DIMENSION;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                ctx.drawImage(img, 0, 0, width, height);
+
+                if (watermark && watermarkText) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; // Semi-transparent white
+                    const fontSize = Math.max(30, Math.floor(width / 20));
+                    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Shadow for high visibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                    ctx.shadowBlur = 6;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
+
+                    ctx.translate(width / 2, height / 2);
+                    ctx.rotate(-Math.PI / 6); // Slanted
+                    ctx.fillText(watermarkText, 0, 0);
+                }
+
+                const outputType = compress ? 'image/jpeg' : file.type;
+                const outputQuality = compress ? quality : 1.0;
+                resolve(canvas.toDataURL(outputType, outputQuality));
+            };
+            img.onerror = () => reject(new Error("Image load error"));
+            img.src = e.target.result;
+        };
+        reader.onerror = () => reject(new Error("File read error"));
+        reader.readAsDataURL(file);
+    });
+}
+
+// Async File processing loop to prevent browser freezing
+async function handleFileSelect(files) {
     if (!files || files.length === 0) {
-        uploadedImages = [];
-        document.getElementById("previewThumbs").innerHTML = "";
-        document.getElementById("previewGrid").style.display = "none";
-        document.getElementById("progressWrap").style.display = "none";
-        isProcessingFiles = false;
+        clearImages();
         return;
     }
 
@@ -720,67 +780,47 @@ function handleFileSelect(files) {
     previewGrid.style.display = "block";
     progressWrap.style.display = "block";
 
-    const totalFiles = files.length;
+    const filesArray = Array.from(files).filter(f => f.type.startsWith("image/"));
+    const totalFiles = filesArray.length;
     let processedFiles = 0;
-    const filesArray = Array.from(files);
 
-    filesArray.forEach((file, index) => {
-        if (!file.type.startsWith("image/")) {
-            console.warn(`⚠️ Skipping non-image file: ${file.name}`);
-            return;
+    for (let i = 0; i < totalFiles; i++) {
+        const file = filesArray[i];
+        
+        try {
+            // Give UI a tiny break to update the progress bar before halting via heavy canvas drawing
+            await new Promise(resolve => setTimeout(resolve, 20));
+            
+            const dataUrl = await processImage(file);
+
+            uploadedImages[i] = {
+                name: file.name,
+                data: dataUrl
+            };
+
+            const thumb = document.createElement("div");
+            thumb.className = "preview-thumb";
+            thumb.innerHTML = `
+                <img src="${dataUrl}" alt="${file.name}">
+                <div class="thumb-name">${file.name}</div>
+            `;
+            previewThumbs.appendChild(thumb);
+        } catch (error) {
+            console.error(`❌ Error processing file ${file.name}:`, error);
         }
 
-        const reader = new FileReader();
+        processedFiles++;
+        updateProgressBar(processedFiles, totalFiles, progressWrap);
+    }
 
-        reader.onload = (e) => {
-            try {
-                uploadedImages[index] = {
-                    name: file.name,
-                    data: e.target.result
-                };
-
-                const thumb = document.createElement("div");
-                thumb.className = "preview-thumb";
-                thumb.innerHTML = `
-                    <img src="${e.target.result}" alt="${file.name}">
-                    <div class="thumb-name">${file.name}</div>
-                `;
-                previewThumbs.appendChild(thumb);
-
-                processedFiles++;
-                updateProgressBar(processedFiles, totalFiles, progressWrap);
-
-                if (processedFiles === totalFiles) {
-                    setTimeout(() => {
-                        progressWrap.style.display = "none";
-                        updatePreviewCount();
-                        const fileInput = document.getElementById("imageFileInput");
-                        if (fileInput) fileInput.value = "";
-                        isProcessingFiles = false;
-                        console.log("✅ File processing complete");
-                    }, 300);
-                }
-            } catch (error) {
-                console.error(`❌ Error processing file ${file.name}:`, error);
-                processedFiles++;
-                updateProgressBar(processedFiles, totalFiles, progressWrap);
-                if (processedFiles === totalFiles) {
-                    isProcessingFiles = false;
-                }
-            }
-        };
-
-        reader.onerror = () => {
-            console.error(`❌ Failed to read file: ${file.name}`);
-            processedFiles++;
-            updateProgressBar(processedFiles, totalFiles, progressWrap);
-            if (processedFiles === totalFiles) {
-                isProcessingFiles = false;
-            }
-        };
-
-        reader.readAsDataURL(file);
-    });
+    setTimeout(() => {
+        progressWrap.style.display = "none";
+        updatePreviewCount();
+        const fileInput = document.getElementById("imageFileInput");
+        if (fileInput) fileInput.value = "";
+        isProcessingFiles = false;
+        console.log("✅ File processing complete");
+    }, 300);
 }
 
 function updateProgressBar(current, total, progressWrap) {
@@ -789,7 +829,7 @@ function updateProgressBar(current, total, progressWrap) {
     const progressLabel = document.getElementById("progressLabel");
     
     if (progressFill) progressFill.style.width = percent + "%";
-    if (progressLabel) progressLabel.textContent = `Reading images… ${current} / ${total}`;
+    if (progressLabel) progressLabel.textContent = `Processing images… ${current} / ${total}`;
 }
 
 function formatFileSize(bytes) {
@@ -817,14 +857,12 @@ function updatePreviewCount() {
     if (count > 0) {
         const estimatedSize = estimateFileSizeInBytes();
         const formattedSize = formatFileSize(estimatedSize);
-        countText += ` • Estimated: ${formattedSize}`;
+        countText += ` • Estimated Code Size: ${formattedSize}`;
         
         if (count !== lastGeneratedImageCount && isGalleryGenerated) {
             isGalleryGenerated = false;
-            console.log("♻️ Image count changed, generation flag reset");
         }
     }
-    
     document.getElementById("previewCount").textContent = countText;
 }
 
@@ -834,13 +872,10 @@ function clearImages() {
     isGalleryGenerated = false;
     lastGeneratedImageCount = 0;
     const fileInput = document.getElementById("imageFileInput");
-    if (fileInput) {
-        fileInput.value = "";
-    }
+    if (fileInput) fileInput.value = "";
     document.getElementById("previewThumbs").innerHTML = "";
     document.getElementById("previewGrid").style.display = "none";
     document.getElementById("progressWrap").style.display = "none";
-    console.log("✅ Images cleared and ready for new upload");
 }
 
 // =========================================================
