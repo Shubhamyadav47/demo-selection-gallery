@@ -60,8 +60,7 @@
       </div>
       <button class="btn-logout" onclick="logout()">
         <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
         </svg>
         Logout
       </button>
@@ -102,17 +101,20 @@
       <div class="form-group" style="margin-bottom: 0;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" id="enableWatermark" style="width:16px; height:16px; accent-color:var(--primary);"> 
-          Add Watermark
+          Add Image Watermark
         </label>
         <div id="watermarkGroup" style="margin-top: 10px; display: none;">
-          <label for="watermarkText" style="font-weight:normal; font-size:13px;">Watermark Text:</label>
-          <input type="text" id="watermarkText" placeholder="e.g. © 2026 My Studio">
+          <label for="watermarkImage" style="font-weight:normal; font-size:13px;">Upload Watermark (PNG recommended):</label>
+          <input type="file" id="watermarkImage" accept="image/png, image/jpeg, image/webp" style="display:block; margin-top:5px; width:100%; font-size: 13px;">
+          <div id="watermarkPreview" style="margin-top:8px; display:none;">
+            <img id="wmPreviewImg" src="" style="max-height:40px; border-radius:4px; border:1px solid #ddd; padding:2px; background: #fff;">
+          </div>
         </div>
       </div>
     </div>
 
     <div class="form-group">
-      <label>Upload Images (Embedded as Base64 — No External Files Needed)</label>
+      <label>Upload Gallery Images (Embedded as Base64)</label>
       <input accept="image/*" id="imageFileInput" multiple="" type="file" style="display: none;"/>
       <div class="upload-zone" id="uploadZone">
         <span class="upload-icon">🖼️</span>
@@ -123,7 +125,7 @@
         <svg fill="none" height="13" stroke="currentColor" viewBox="0 0 24 24" width="13">
           <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
         </svg>
-        Applying processing changes requires re-uploading the images.
+        Applying processing changes requires re-uploading the gallery images.
       </span>
 
       <div id="previewGrid">
