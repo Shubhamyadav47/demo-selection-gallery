@@ -16,6 +16,7 @@ function generateGallery() {
     const title = document.getElementById("galleryTitle").value || "My Gallery";
     const password = document.getElementById("galleryPassword").value;
     const whatsappNumber = document.getElementById("whatsappNumber").value;
+    const waNumber = whatsappNumber; // Define waNumber from whatsappNumber input
 
     const btn = document.getElementById("generateBtn");
     btn.disabled = true;
