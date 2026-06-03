@@ -748,6 +748,57 @@ button {
     background: #DDEAFF;
 }
 
+/* Connection Status Indicator */
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.connection-status.online {
+    background: #ECFDF5;
+    color: #059669;
+}
+
+.connection-status.offline {
+    background: #FEF2F2;
+    color: #DC2626;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.connection-status.online .status-dot {
+    background: #10B981;
+    animation: pulse-online 2s infinite;
+}
+
+.connection-status.offline .status-dot {
+    background: #EF4444;
+    animation: pulse-offline 1s infinite;
+}
+
+@keyframes pulse-online {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes pulse-offline {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
 /* Logout button */
 .btn-logout {
     display: flex;
