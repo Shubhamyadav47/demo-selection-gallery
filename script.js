@@ -635,10 +635,8 @@ let uploadZoneInitialized = false;
 let isProcessingFiles = false; 
 let isGalleryGenerated = false; 
 let lastGeneratedImageCount = 0; 
-let watermarkImgData = null; // Holds the uploaded watermark image object
 
 function setupProcessingOptions() {
-    // Watermark Toggle
     const wmCheck = document.getElementById('enableWatermark');
     const wmGroup = document.getElementById('watermarkGroup');
     if (wmCheck && wmGroup) {
@@ -647,33 +645,6 @@ function setupProcessingOptions() {
         });
     }
 
-    // Watermark Image Upload Handler
-    const wmInput = document.getElementById('watermarkImage');
-    const wmPreview = document.getElementById('watermarkPreview');
-    const wmPreviewImg = document.getElementById('wmPreviewImg');
-    
-    if (wmInput) {
-        wmInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    watermarkImgData = new Image();
-                    watermarkImgData.onload = () => {
-                        wmPreviewImg.src = event.target.result;
-                        wmPreview.style.display = 'inline-block';
-                    };
-                    watermarkImgData.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
-            } else {
-                watermarkImgData = null;
-                wmPreview.style.display = 'none';
-            }
-        });
-    }
-
-    // Compression Toggle
     const compCheck = document.getElementById('compressImages');
     const compGroup = document.getElementById('compressGroup');
     if (compCheck && compGroup) {
@@ -682,7 +653,6 @@ function setupProcessingOptions() {
         });
     }
 
-    // Quality Slider
     const qualitySlider = document.getElementById('compressQuality');
     const qualityVal = document.getElementById('qualityVal');
     if (qualitySlider && qualityVal) {
@@ -726,12 +696,12 @@ function processImage(file) {
         const compress = document.getElementById('compressImages').checked;
         const quality = parseFloat(document.getElementById('compressQuality').value);
         const watermark = document.getElementById('enableWatermark').checked;
+        const watermarkText = document.getElementById('watermarkText').value.trim();
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            // Return original immediately if no processing is needed
-            if (!compress && (!watermark || !watermarkImgData)) {
-                resolve(e.target.result); 
+            if (!compress && (!watermark || !watermarkText)) {
+                resolve(e.target.result); // Return original if no processing needed
                 return;
             }
 
@@ -743,7 +713,6 @@ function processImage(file) {
                 let width = img.width;
                 let height = img.height;
 
-                // Handle Compression & Resizing
                 if (compress) {
                     const MAX_DIMENSION = 1600; // Optimal max dimension for standard screens
                     if (width > height && width > MAX_DIMENSION) {
@@ -758,30 +727,24 @@ function processImage(file) {
                 canvas.width = width;
                 canvas.height = height;
 
-                // Draw main image
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // Handle Image Watermark Overlay
-                if (watermark && watermarkImgData) {
-                    // Maximum size of watermark relative to the image (e.g. 25% of the width/height)
-                    const maxScale = 0.25; 
-                    const scale = Math.min(
-                        (width * maxScale) / watermarkImgData.width, 
-                        (height * maxScale) / watermarkImgData.height
-                    );
+                if (watermark && watermarkText) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; // Semi-transparent white
+                    const fontSize = Math.max(30, Math.floor(width / 20));
+                    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
                     
-                    const wmWidth = watermarkImgData.width * scale;
-                    const wmHeight = watermarkImgData.height * scale;
-                    
-                    // Padding from the bottom right corner
-                    const padding = Math.min(width, height) * 0.03; 
-                    const wmX = width - wmWidth - padding;
-                    const wmY = height - wmHeight - padding;
+                    // Shadow for high visibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                    ctx.shadowBlur = 6;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
 
-                    // Apply transparency to the watermark
-                    ctx.globalAlpha = 0.7; // 70% opacity
-                    ctx.drawImage(watermarkImgData, wmX, wmY, wmWidth, wmHeight);
-                    ctx.globalAlpha = 1.0; // Reset alpha just in case
+                    ctx.translate(width / 2, height / 2);
+                    ctx.rotate(-Math.PI / 6); // Slanted
+                    ctx.fillText(watermarkText, 0, 0);
                 }
 
                 const outputType = compress ? 'image/jpeg' : file.type;
