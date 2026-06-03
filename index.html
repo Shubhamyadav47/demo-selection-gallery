@@ -1,35 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Premium Secure Gallery &amp; Selection Generator</title>
-<link href="styles.css" rel="stylesheet"/>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Premium Secure Gallery &amp; Selection Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet"/>
 </head>
 <body>
 
-<!-- ================================================
-     AUTH OVERLAY — displayed until user signs in
-     ================================================ -->
-<div id="authOverlay" class="auth-overlay">
+<div id="authOverlay" class="auth-overlay" style="display:none"> 
   <div class="auth-card">
-
-    <!-- Brand -->
     <div class="auth-brand">
-      <span class="auth-brand-icon">🖼️</span>
+      <div class="auth-brand-icon">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+      </div>
       <div>
         <h2>Gallery Generator</h2>
-        <p>Sign in with Google to access your private tools</p>
+        <p>Sign in to access your workspace</p>
       </div>
     </div>
-
-    <!-- Auth messages -->
-    <div id="authError"   class="auth-msg auth-msg--error"></div>
+    <div id="authError" class="auth-msg auth-msg--error"></div>
     <div id="authSuccess" class="auth-msg auth-msg--success"></div>
-
-    <!-- Google Sign-In -->
     <button class="btn-google" onclick="signInWithGoogle()">
-      <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
@@ -37,144 +31,132 @@
       </svg>
       Continue with Google
     </button>
-
   </div>
-</div><!-- /#authOverlay -->
+</div>
 
+<div id="mainApp" style="display:flex"> 
 
-<!-- ================================================
-     MAIN APP — revealed after authentication
-     ================================================ -->
-<div id="mainApp" style="display:none">
-  <div class="container">
+  <nav class="global-nav">
+    <div class="nav-container">
+      <div class="nav-left">
+        <div class="user-info">
+          <div class="user-avatar-wrap">
+            <img id="userAvatarImg" class="user-avatar-img" src="" alt="" style="display:none"/>
+            <div id="userInitials" class="user-initials"></div>
+          </div>
+          <div class="user-details">
+            <span id="userDisplayName" class="user-name"></span>
+            <span id="userEmailDisplay" class="user-email-text"></span>
+          </div>
+        </div>
+        <div id="connectionStatus" class="connection-status online">
+          <span class="status-dot"></span>Online
+        </div>
+      </div>
 
-    <!-- User Bar -->
-  <div class="user-bar">
-    <div class="user-info">
-      <div class="user-avatar-wrap">
-        <img id="userAvatarImg" class="user-avatar-img" src="" alt="" style="display:none"/>
-        <div id="userInitials" class="user-initials"></div>
-      </div>
-      <div class="user-details">
-        <span id="userDisplayName" class="user-name"></span>
-        <span id="userEmailDisplay" class="user-email-text"></span>
-      </div>
-    </div>
-    <div id="connectionStatus" class="connection-status online">
-      <span class="status-dot"></span>Online
-    </div>
-    <div class="token-info">
-      <span class="token-label">Tokens:</span>
-      <strong id="tokenCount">0</strong>
-      <div class="buy-buttons-inline">
-        <button class="btn-buy-tokens" type="button" onclick="buyTokens(1)">Buy 1 (₹25)</button>
-        <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5 (₹99)</button>
-        <button class="btn-buy-tokens" type="button" onclick="buyTokens(10)">Buy 10 (₹179)</button>
-        <button class="btn-buy-tokens" type="button" onclick="buyTokens(25)">Buy 25 (₹499)</button>
+      <div class="nav-right">
+        <div class="token-module">
+          <div class="token-balance">
+            <span class="token-label">Tokens</span>
+            <strong id="tokenCount">0</strong>
+          </div>
+          <div class="buy-buttons-inline">
+            <button class="btn-buy" type="button" onclick="buyTokens(1)">1 (₹25)</button>
+            <button class="btn-buy" type="button" onclick="buyTokens(5)">5 (₹99)</button>
+            <button class="btn-buy" type="button" onclick="buyTokens(10)">10 (₹179)</button>
+            <button class="btn-buy accent" type="button" onclick="buyTokens(25)">25 (₹499)</button>
+          </div>
+        </div>
+        <button class="btn-icon" onclick="logout()" title="Logout">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+        </button>
       </div>
     </div>
-    <button class="btn-logout" onclick="logout()">
-      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-      </svg>
-      Logout
-    </button>
-  </div>
-    <!-- Header Section -->
-    <div class="header">
-      <h1>Secure Selection Gallery Generator</h1>
-      <p>Generate private, responsive galleries with instant photo selection, WhatsApp sharing, &amp; file list copying.<br/>
-        Images are embedded directly — <strong>no external files needed.</strong></p>
+  </nav>
+
+  <main class="main-content">
+    <div class="app-header">
+      <h1>Secure Gallery Generator</h1>
+      <p>Create private, standalone HTML galleries with instant WhatsApp sharing. No external hosting required.</p>
     </div>
-    <!-- Gallery Configuration Inputs -->
-    <div class="form-row">
+
+    <div class="card-container">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="galleryTitle">Gallery Title</label>
+          <input id="galleryTitle" placeholder="e.g., Shubhda Studios Selection" type="text" value="My Private Photo Gallery"/>
+        </div>
+        <div class="form-group">
+          <label for="galleryPassword">Access Password <span class="label-optional">(Optional)</span></label>
+          <input autocomplete="new-password" id="galleryPassword" placeholder="Leave blank for public access" type="password"/>
+        </div>
+      </div>
+      
       <div class="form-group">
-        <label for="galleryTitle">Gallery Title</label>
-        <input id="galleryTitle" placeholder="e.g., Shubhda Studios Selection" type="text" value="My Private Photo Gallery"/>
+        <label for="whatsappNumber">Photographer's WhatsApp <span class="label-optional">(Optional)</span></label>
+        <input id="whatsappNumber" placeholder="Include country code (e.g., 919876543210)" type="text"/>
       </div>
-      <div class="form-group">
-        <label for="galleryPassword">Access Password (Optional)</label>
-        <input autocomplete="new-password" id="galleryPassword" placeholder="Leave blank for no password" type="password"/>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="whatsappNumber">Photographer's WhatsApp Number (Optional)</label>
-      <input id="whatsappNumber" placeholder="Include country code without '+' or '00' (e.g., 919876543210)" type="text"/>
-    </div>
-    <!-- IMAGE UPLOAD ZONE -->
-    <div class="form-group">
-      <label>Upload Images (Embedded as Base64 — No External Files Needed)</label>
-      <input accept="image/*" id="imageFileInput" multiple="" type="file" style="display: none;"/>
-      <div class="upload-zone" id="uploadZone">
-        <span class="upload-icon">🖼️</span>
-        <div class="upload-title">Click to select images, or drag &amp; drop here</div>
-        <div class="upload-hint">Supports JPG, PNG, WEBP, GIF — all images will be embedded inside the HTML output</div>
-      </div>
-      <span class="info-badge">
-        <svg fill="none" height="13" stroke="currentColor" viewBox="0 0 24 24" width="13">
-          <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
-        </svg>
-        Images are converted to Base64 Data URLs and stored inside the generated HTML file
-      </span>
-      <!-- Preview thumbnails after selection -->
-      <div id="previewGrid">
-        <div class="preview-header">
-          <span class="preview-count" id="previewCount">0 images selected</span>
-          <button class="clear-btn" onclick="clearImages()">✕ Clear All</button>
-        </div>
-        <div class="preview-thumbs" id="previewThumbs"></div>
-      </div>
-      <!-- Reading progress bar -->
-      <div id="progressWrap">
-        <div class="progress-label" id="progressLabel">Reading images… 0 / 0</div>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="progressFill"></div>
-        </div>
-      </div>
-      <div class="token-bar">
-        <div class="token-info">
-          <span>Tokens available:</span>
-          <strong id="tokenCountInline">0</strong>
-        </div>
-        <div class="token-actions">
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(1)">Buy 1 (₹25)</button>
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(5)">Buy 5 (₹99)</button>
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(10)">Buy 10 (₹179)</button>
-          <button class="btn-buy-tokens" type="button" onclick="buyTokens(25)">Buy 25 (₹499)</button>
-        </div>
-        <p class="token-note">Each gallery generation consumes 1 token.</p>
-      </div>
-    </div>
-    <!-- Action Buttons -->
-    <div class="buttons-wrapper">
-      <button class="btn-generate" id="generateBtn" onclick="generateGallery()">
-        <svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20">
-          <path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-            stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
-        </svg>
-        Generate HTML Code
-      </button>
-      <button class="btn-download" id="downloadBtn" onclick="downloadFile()">
-        <svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20">
-          <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-            stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
-        </svg>
-        Download Gallery File
-      </button>
-    </div>
-  </div><!-- /.container -->
 
-</div><!-- /#mainApp -->
+      <div class="form-group upload-group">
+        <label>Media Assets <span class="label-optional">(Embedded via Base64)</span></label>
+        <input accept="image/*" id="imageFileInput" multiple="" type="file" style="display: none;"/>
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-icon-wrap">
+             <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          </div>
+          <div class="upload-text">
+            <strong>Click to upload</strong> or drag and drop
+          </div>
+          <div class="upload-hint">JPG, PNG, WEBP, GIF supported</div>
+        </div>
+        
+        <div class="info-row">
+          <span class="info-badge">
+            <svg fill="none" height="14" stroke="currentColor" viewBox="0 0 24 24" width="14">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Images are heavily compressed and embedded directly into the final HTML file.
+          </span>
+        </div>
 
+        <div id="previewGrid">
+          <div class="preview-header">
+            <span class="preview-count" id="previewCount">0 images selected</span>
+            <button class="clear-btn" onclick="clearImages()">Clear selection</button>
+          </div>
+          <div class="preview-thumbs" id="previewThumbs"></div>
+        </div>
+
+        <div id="progressWrap">
+          <div class="progress-label" id="progressLabel">Processing images... 0 / 0</div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <strong id="tokenCountInline" style="display:none">0</strong>
+
+      <div class="buttons-wrapper">
+        <button class="btn-primary" id="generateBtn" onclick="generateGallery()">
+          Generate Gallery <span class="cost-badge">1 Token</span>
+        </button>
+        <button class="btn-secondary" id="downloadBtn" onclick="downloadFile()">
+          <svg fill="none" height="18" stroke="currentColor" viewBox="0 0 24 24" width="18">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          </svg>
+          Download HTML
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
 
 <div id="toast">Gallery Generated Successfully!</div>
 
-<!-- Razorpay for payment processing -->
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-
-<!-- Firebase SDKs — must load before script.js -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>

@@ -427,8 +427,27 @@ function buyTokens(amount) {
 // =========================================================
 //  AUTH STATE OBSERVER
 // =========================================================
-auth.onAuthStateChanged(async (user) => {
+// auth.onAuthStateChanged(async (user) => {
+//     const authOverlay = document.getElementById("authOverlay");
+
+    auth.onAuthStateChanged(async (user) => {
+    return; // <-- ADD THIS LINE to bypass the auth check locally
     const authOverlay = document.getElementById("authOverlay");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     const mainApp     = document.getElementById("mainApp");
 
     if (user) {
