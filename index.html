@@ -1,24 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Essential SEO Meta Tags -->
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>Premium Secure Gallery &amp; Selection Generator</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="description" content="Create stunning private photo galleries with password protection. Embed directly into HTML files. Perfect for photographers, studios, and professionals. No hosting required."/>
+    <meta name="keywords" content="photo gallery generator, private gallery, HTML gallery, photographer portfolio, secure gallery, image gallery creator"/>
+    <meta name="author" content="Gallery Generator"/>
+    <meta name="theme-color" content="#6366F1"/>
+    
+    <!-- Open Graph Tags for Social Sharing -->
+    <meta property="og:title" content="Premium Secure Gallery & Selection Generator"/>
+    <meta property="og:description" content="Create beautiful, password-protected photo galleries with instant WhatsApp sharing"/>
+    <meta property="og:type" content="website"/>
+    <meta property="og:url" content="https://gallery-generator.com"/>
+    <meta property="og:image" content="https://gallery-generator.com/og-image.jpg"/>
+    
+    <!-- Twitter Card Tags -->
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="Premium Secure Gallery Generator"/>
+    <meta name="twitter:description" content="Create stunning private photo galleries in minutes"/>
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://gallery-generator.com"/>
+    
+    <title>Premium Secure Gallery & Selection Generator - Create Private Photo Galleries</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="styles.css" rel="stylesheet"/>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75' font-weight='bold' fill='%236366F1'>🎨</text></svg>"/>
 </head>
 <body>
 
-<div id="authOverlay" class="auth-overlay" style="display:none"> 
+<!-- Auth Overlay -->
+<!-- <div id="authOverlay" class="auth-overlay" style="display:none">  -->
+  <div id="authOverlay" class="auth-overlay"></div>
   <div class="auth-card">
-    <div class="auth-brand">
+    <div class="auth-header">
       <div class="auth-brand-icon">
-        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
       </div>
-      <div>
-        <h2>Gallery Generator</h2>
-        <p>Sign in to access your workspace</p>
-      </div>
+      <h2>Gallery Generator</h2>
+      <p>Create stunning galleries in seconds</p>
     </div>
     <div id="authError" class="auth-msg auth-msg--error"></div>
     <div id="authSuccess" class="auth-msg auth-msg--success"></div>
@@ -34,23 +58,28 @@
   </div>
 </div>
 
-<div id="mainApp" style="display:flex"> 
+<!-- Main Application -->
+<!-- <div id="mainApp" style="display:flex"> -->
 
+  <div id="mainApp" style="display:none"></div>
+
+  <!-- Navigation Bar -->
   <nav class="global-nav">
     <div class="nav-container">
       <div class="nav-left">
+        <div class="nav-logo">
+          <span class="logo-icon">🎨</span>
+          <span class="logo-text">Gallery</span>
+        </div>
         <div class="user-info">
           <div class="user-avatar-wrap">
-            <img id="userAvatarImg" class="user-avatar-img" src="" alt="" style="display:none"/>
+            <img id="userAvatarImg" class="user-avatar-img" src="" alt="User avatar" style="display:none"/>
             <div id="userInitials" class="user-initials"></div>
           </div>
           <div class="user-details">
             <span id="userDisplayName" class="user-name"></span>
             <span id="userEmailDisplay" class="user-email-text"></span>
           </div>
-        </div>
-        <div id="connectionStatus" class="connection-status online">
-          <span class="status-dot"></span>Online
         </div>
       </div>
 
@@ -76,51 +105,87 @@
     </div>
   </nav>
 
+  <!-- Main Content -->
   <main class="main-content">
-    <div class="app-header">
-      <h1>Secure Gallery Generator</h1>
-      <p>Create private, standalone HTML galleries with instant WhatsApp sharing. No external hosting required.</p>
+    <div class="hero-section">
+      <div class="hero-background"></div>
+      <div class="hero-content">
+        <h1>Create Stunning Photo Galleries</h1>
+        <p>Generate beautiful, password-protected galleries with one click. Share instantly via WhatsApp. No hosting required.</p>
+        <div class="hero-badges">
+          <span class="badge">✨ Instant Sharing</span>
+          <span class="badge">🔒 Password Protected</span>
+          <span class="badge">⚡ No Hosting Needed</span>
+        </div>
+      </div>
     </div>
 
     <div class="card-container">
+      <div class="section-header">
+        <h2>Gallery Settings</h2>
+        <p>Customize your gallery with these essential details</p>
+      </div>
+
+      <!-- Form Fields -->
       <div class="form-row">
         <div class="form-group">
-          <label for="galleryTitle">Gallery Title</label>
+          <label for="galleryTitle">
+            <span class="label-icon">📝</span>
+            Gallery Title
+          </label>
           <input id="galleryTitle" placeholder="e.g., Shubhda Studios Selection" type="text" value="My Private Photo Gallery"/>
         </div>
         <div class="form-group">
-          <label for="galleryPassword">Access Password <span class="label-optional">(Optional)</span></label>
+          <label for="galleryPassword">
+            <span class="label-icon">🔐</span>
+            Access Password <span class="label-optional">(Optional)</span>
+          </label>
           <input autocomplete="new-password" id="galleryPassword" placeholder="Leave blank for public access" type="password"/>
         </div>
       </div>
       
       <div class="form-group">
-        <label for="whatsappNumber">Photographer's WhatsApp <span class="label-optional">(Optional)</span></label>
+        <label for="whatsappNumber">
+          <span class="label-icon">💬</span>
+          Photographer's WhatsApp <span class="label-optional">(Optional)</span>
+        </label>
         <input id="whatsappNumber" placeholder="Include country code (e.g., 919876543210)" type="text"/>
       </div>
 
+      <!-- Media Upload Section -->
       <div class="form-group upload-group">
-        <label>Media Assets <span class="label-optional">(Embedded via Base64)</span></label>
+        <div class="upload-header">
+          <label>
+            <span class="label-icon">🖼️</span>
+            Media Assets <span class="label-optional">(Embedded via Base64)</span>
+          </label>
+          <p class="upload-description">Upload high-quality images that will be compressed and embedded into your gallery HTML file.</p>
+        </div>
+
         <input accept="image/*" id="imageFileInput" multiple="" type="file" style="display: none;"/>
+        
         <div class="upload-zone" id="uploadZone">
           <div class="upload-icon-wrap">
-             <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+             <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+             </svg>
           </div>
           <div class="upload-text">
             <strong>Click to upload</strong> or drag and drop
           </div>
-          <div class="upload-hint">JPG, PNG, WEBP, GIF supported</div>
+          <div class="upload-hint">JPG, PNG, WEBP, GIF (Max 50MB per file)</div>
         </div>
         
         <div class="info-row">
-          <span class="info-badge">
-            <svg fill="none" height="14" stroke="currentColor" viewBox="0 0 24 24" width="14">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          <div class="info-badge success">
+            <svg fill="none" height="16" stroke="currentColor" viewBox="0 0 24 24" width="16">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
-            Images are heavily compressed and embedded directly into the final HTML file.
-          </span>
+            <span>Images are heavily compressed and embedded directly into the HTML file</span>
+          </div>
         </div>
 
+        <!-- Preview Grid -->
         <div id="previewGrid">
           <div class="preview-header">
             <span class="preview-count" id="previewCount">0 images selected</span>
@@ -129,6 +194,7 @@
           <div class="preview-thumbs" id="previewThumbs"></div>
         </div>
 
+        <!-- Progress Bar -->
         <div id="progressWrap">
           <div class="progress-label" id="progressLabel">Processing images... 0 / 0</div>
           <div class="progress-bar-track">
@@ -137,30 +203,79 @@
         </div>
       </div>
 
-      <strong id="tokenCountInline" style="display:none">0</strong>
-
+      <!-- Action Buttons -->
       <div class="buttons-wrapper">
         <button class="btn-primary" id="generateBtn" onclick="generateGallery()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
           Generate Gallery <span class="cost-badge">1 Token</span>
         </button>
         <button class="btn-secondary" id="downloadBtn" onclick="downloadFile()">
-          <svg fill="none" height="18" stroke="currentColor" viewBox="0 0 24 24" width="18">
+          <svg fill="none" height="20" stroke="currentColor" viewBox="0 0 24 24" width="20">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
           </svg>
           Download HTML
         </button>
       </div>
+
+      <!-- Feature Cards -->
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🚀</div>
+          <h3>Fast & Instant</h3>
+          <p>Generate galleries in seconds</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔐</div>
+          <h3>Secure</h3>
+          <p>Password protected galleries</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📱</div>
+          <h3>Mobile Friendly</h3>
+          <p>Works on all devices</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💰</div>
+          <h3>Affordable</h3>
+          <p>Token-based pricing</p>
+        </div>
+      </div>
     </div>
+
+    <!-- Footer with Schema -->
+    <footer class="footer">
+      <p>&copy; 2024 Gallery Generator. All rights reserved. | Created with ❤️ for photographers</p>
+    </footer>
   </main>
 </div>
 
+<!-- Toast Notification -->
 <div id="toast">Gallery Generated Successfully!</div>
 
+<!-- External Scripts -->
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "WebApplication",
+  "name": "Premium Secure Gallery Generator",
+  "description": "Create beautiful, password-protected photo galleries with instant WhatsApp sharing",
+  "url": "https://gallery-generator.com",
+  "applicationCategory": "ProductionApplication",
+  "operatingSystem": "All",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "INR",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
 <script src="script.js"></script>
-
 </body>
 </html>
