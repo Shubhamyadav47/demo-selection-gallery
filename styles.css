@@ -1,7 +1,7 @@
 /* =========================
    GLOBAL THEME VARIABLES
    ========================= */
-   :root {
+:root {
     --primary: #581c87;
     --primary-hover: #4c1d95;
     --success: #0d9488;
@@ -41,12 +41,13 @@ body {
    ========================= */
 #mainApp {
     width: 100%;
-    max-width: 500px; /* narrowed to match mobile card ratio */
+    max-width: 500px; /* Mobile first */
     display: flex;
     flex-direction: column;
     gap: 12px;
     animation: fadeInUp 0.4s ease forwards;
-    margin-top: 30px; /* space for popping avatar */
+    margin-top: 30px; 
+    transition: max-width 0.3s ease;
 }
 
 @keyframes fadeInUp {
@@ -65,6 +66,7 @@ body {
     box-shadow: 0 0 40px rgba(0,0,0,0.3), inset 0 0 20px rgba(255,255,255,0.5);
     border: 3px solid rgba(255, 255, 255, 0.4);
     position: relative;
+    transition: padding 0.3s ease;
 }
 
 /* =========================
@@ -120,7 +122,6 @@ body {
     box-shadow: 0 0 0 4px #dcfce7, 0 0 0 8px #c084fc;
 }
 
-/* Hide extra text to match design */
 .user-details { display: none; }
 
 /* Status Indicator */
@@ -170,7 +171,6 @@ body {
     align-items: center;
 }
 
-/* Inject coin emoji */
 .token-label::before {
     content: "🪙";
     margin-right: 8px;
@@ -183,10 +183,10 @@ body {
     color: #1e1b4b;
 }
 
-/* 2x2 Grid for Buy Buttons */
+/* Buy Buttons Grid */
 .buy-buttons-inline {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr; /* 2x2 on Mobile */
     gap: 12px;
     width: 100%;
     margin-top: 12px;
@@ -207,7 +207,6 @@ body {
 
 .btn-buy-tokens:hover { transform: translateY(-2px); }
 
-/* Color coding buttons matching reference */
 .btn-buy-tokens:nth-child(1) { background: linear-gradient(to right, #0d9488, #14b8a6); }
 .btn-buy-tokens:nth-child(2) { background: linear-gradient(to right, #6b21a8, #9333ea); }
 .btn-buy-tokens:nth-child(3) { background: linear-gradient(to right, #d97706, #f59e0b); }
@@ -230,6 +229,7 @@ body {
     gap: 8px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     cursor: pointer;
+    margin-top: 8px;
 }
 
 /* =========================
@@ -237,7 +237,7 @@ body {
    ========================= */
 .header { text-align: center; margin-bottom: 24px; }
 
-.header h1 {
+/* .header h1 {
     font-size: 26px;
     font-weight: 900;
     background: linear-gradient(to right, #6b21a8, #2563eb);
@@ -245,7 +245,21 @@ body {
     -webkit-text-fill-color: transparent;
     line-height: 1.2;
     margin-bottom: 12px;
+} */
+
+
+.header h1 {
+    font-size: 26px;
+    font-weight: 900;
+    background: linear-gradient(to right, #6b21a8, #2563eb);
+    -webkit-background-clip: text;
+    background-clip: text; /* Adds standard browser support */
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+    margin-bottom: 12px;
 }
+
+
 
 .header p {
     color: var(--text-main);
@@ -258,7 +272,7 @@ body {
    ========================= */
 .form-row {
     display: grid;
-    grid-template-columns: 1fr; /* Stack vertically matching design */
+    grid-template-columns: 1fr; /* Stacked on mobile */
     gap: 16px;
 }
 
@@ -275,7 +289,7 @@ label {
 input[type="text"],
 input[type="password"] {
     width: 100%;
-    padding: 14px 16px 14px 44px; /* Space for background icons */
+    padding: 14px 16px 14px 44px;
     border-radius: 12px;
     border: 2px solid var(--border);
     font-size: 14px;
@@ -295,7 +309,6 @@ input:focus {
     box-shadow: 0 0 0 3px rgba(126, 34, 206, 0.2);
 }
 
-/* Inject Icons into inputs using Data URIs */
 #galleryTitle {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'/%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'/%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'/%3E%3C/svg%3E");
 }
@@ -325,7 +338,6 @@ input:focus {
 
 .upload-zone:hover { background-color: #f8fafc; border-color: #7e22ce; }
 
-/* Replace emoji with SVG camera icon via pseudo element */
 .upload-zone .upload-icon { display: none; }
 .upload-zone::before {
     content: "";
@@ -347,7 +359,7 @@ input:focus {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    background: #e9d5ff; /* Light purple */
+    background: #e9d5ff; 
     border: 1px solid #c084fc;
     color: #4c1d95;
     font-size: 12px;
@@ -365,6 +377,7 @@ input:focus {
    ========================= */
 .buttons-wrapper {
     display: flex;
+    flex-direction: column; /* Stacked on mobile */
     gap: 12px;
     margin-top: 24px;
 }
@@ -411,12 +424,10 @@ input:focus {
 .progress-bar-track { width: 100%; height: 8px; background-color: #E5E7EB; border-radius: 99px; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #6b21a8, #3b82f6); border-radius: 99px; width: 0%; transition: width 0.2s ease; }
 
-/* Hide redundant token bar inside form (re-handled by top user-bar) */
 .form-group .token-bar { display: none; }
 
 /* =========================
    TOAST & AUTH OVERLAYS
-   (Kept minimal structural styles for logic)
    ========================= */
 #toast {
     position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
@@ -425,7 +436,6 @@ input:focus {
 }
 #toast.show { transform: translateX(-50%) translateY(0); }
 
-/* AUTH - Restyled to match the dark theme */
 .auth-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--bg-main); display: flex; justify-content: center; align-items: center; padding: 20px; transition: opacity 0.3s ease; }
 .auth-card { background: var(--card-bg); width: 100%; max-width: 420px; padding: 40px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.2); }
 .auth-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
@@ -434,3 +444,52 @@ input:focus {
 .auth-brand p { font-size: 13px; color: var(--text-muted); font-weight: 500; }
 .btn-google { width: 100%; padding: 14px; background: white; color: #111827; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
 .btn-google:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+
+/* =========================================
+   🖥️ DESKTOP & BIG SCREEN MEDIA QUERIES
+   ========================================= */
+@media (min-width: 768px) {
+    /* Widen the main card on PC */
+    #mainApp {
+        max-width: 800px;
+        margin-top: 60px; /* Extra space for floating avatar */
+    }
+
+    /* Add more breathing room inside the card */
+    .container {
+        padding: 60px 40px 40px 40px;
+    }
+
+    /* Place inputs side-by-side */
+    .form-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* Place all 4 token buttons in a single row */
+    .buy-buttons-inline {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    /* Make the action buttons at the bottom side-by-side */
+    .buttons-wrapper {
+        flex-direction: row;
+    }
+
+    /* Space out token elements better on wide screen */
+    .user-bar .token-info {
+        gap: 16px;
+    }
+
+    /* Enlarge the floating avatar slightly for big screens */
+    .user-avatar-wrap {
+        top: -55px;
+    }
+    
+    .user-initials, 
+    .user-avatar-img {
+        width: 76px;
+        height: 76px;
+        font-size: 28px;
+    }
+}
